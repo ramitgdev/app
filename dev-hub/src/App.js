@@ -6,7 +6,6 @@ import { createClient } from '@supabase/supabase-js';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { useGoogleLogin } from '@react-oauth/google';
-import { gapi } from "gapi-script";
 // --- NEW: Material-UI imports ---
 import {
   AppBar, Toolbar, Typography, Button, IconButton, Box, Paper, Drawer, List, ListItem, ListItemIcon, ListItemText, Divider, TextField, InputAdornment, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Chip, Tooltip, Avatar, Stack, Snackbar, Alert, Radio, RadioGroup, FormControlLabel, FormControl, FormLabel, CssBaseline, Container, Grid, Card, CardContent, CardActions, Tabs, Tab, ListItemAvatar
@@ -1107,7 +1106,8 @@ const loginWithGoogle = useGoogleLogin({
     setGoogleToken(tokenResponse.access_token);
   },
   onError: (error) => {
-    alert("Google login failed: " + error.error || "Unknown error");
+    console.error("Google login error:", error);
+    alert("Google login failed. For now, you can view Google Docs by clicking 'Open in Google Docs' link below.");
     setGoogleToken(null);
   }
 });
@@ -1141,12 +1141,18 @@ async function fetchCollaborators(workspaceId) {
 }
 
 async function fetchWorkspaces() {
+    // Get workspaces owned by the user
     let { data: owned } = await supabase.from('workspaces').select('*').eq('owner_id', user.id);
-    let { data: memberRows } = await supabase.from('workspace_members').select('workspace_id').eq('user_email', user.email);
+    
+    // Get workspaces where user is a member (both invited and accepted)
+    let { data: memberRows } = await supabase.from('workspace_members').select('workspace_id, user_id').eq('user_email', user.email);
     const memberWorkspaceIds = (memberRows || []).map(wm => wm.workspace_id);
+    
     let { data: shared } = memberWorkspaceIds.length
       ? await supabase.from('workspaces').select('*').in('id', memberWorkspaceIds)
       : { data: [] };
+    
+    // Combine and deduplicate workspaces
     setWorkspaces([...owned || [], ...(shared || [])].filter((wksp, idx, arr) =>
       arr.findIndex(w => w.id === wksp.id) === idx));
   }
@@ -1326,7 +1332,29 @@ useEffect(() => {
   async function deleteWorkspace(wkspId) {
     if (!window.confirm("Delete this workspace and all its folders/resources in your local browser?")) return;
     try {
-      // First delete all workspace members to avoid foreign key constraint
+      // Check if user is the owner of the workspace
+      const { data: workspace } = await supabase
+        .from('workspaces')
+        .select('owner_id')
+        .eq('id', wkspId)
+        .single();
+      
+      if (!workspace || workspace.owner_id !== user.id) {
+        alert('You can only delete workspaces you own.');
+        return;
+      }
+
+      // First delete all workspace chats
+      const { error: chatsError } = await supabase
+        .from('workspace_chats')
+        .delete()
+        .eq('workspace_id', wkspId);
+      
+      if (chatsError) {
+        console.error('Error deleting workspace chats:', chatsError);
+      }
+
+      // Then delete all workspace members
       const { error: membersError } = await supabase
         .from('workspace_members')
         .delete()
@@ -1338,7 +1366,7 @@ useEffect(() => {
         return;
       }
 
-      // Then delete the workspace
+      // Finally delete the workspace
       const { error: workspaceError } = await supabase
         .from('workspaces')
         .delete()
@@ -1350,11 +1378,12 @@ useEffect(() => {
         return;
       }
 
-      // Only clear local storage if database deletion succeeded
+      // Clear local storage
       localStorage.removeItem(`folders-${wkspId}`);
       localStorage.removeItem(`resources-${wkspId}`);
       setSelectedWksp(null);
       await fetchWorkspaces();
+      alert('Workspace deleted successfully!');
     } catch (err) {
       console.error('Unexpected error deleting workspace:', err);
       alert('Unexpected error occurred while deleting workspace');
