@@ -1332,52 +1332,52 @@ useEffect(() => {
   async function deleteWorkspace(wkspId) {
     if (!window.confirm("Delete this workspace and all its folders/resources in your local browser?")) return;
     try {
+      console.log('Attempting to delete workspace:', wkspId);
+      console.log('Current user:', user);
       // Check if user is the owner of the workspace
-      const { data: workspace } = await supabase
+      const { data: workspace, error: workspaceFetchError } = await supabase
         .from('workspaces')
         .select('owner_id')
         .eq('id', wkspId)
         .single();
-      
+      if (workspaceFetchError) {
+        console.error('Error fetching workspace:', workspaceFetchError);
+        alert('Error fetching workspace: ' + workspaceFetchError.message);
+        return;
+      }
       if (!workspace || workspace.owner_id !== user.id) {
         alert('You can only delete workspaces you own.');
         return;
       }
-
       // First delete all workspace chats
       const { error: chatsError } = await supabase
         .from('workspace_chats')
         .delete()
         .eq('workspace_id', wkspId);
-      
       if (chatsError) {
         console.error('Error deleting workspace chats:', chatsError);
+        alert('Error deleting workspace chats: ' + chatsError.message);
       }
-
       // Then delete all workspace members
       const { error: membersError } = await supabase
         .from('workspace_members')
         .delete()
         .eq('workspace_id', wkspId);
-      
       if (membersError) {
         console.error('Error deleting workspace members:', membersError);
         alert(`Error deleting workspace members: ${membersError.message}`);
         return;
       }
-
       // Finally delete the workspace
       const { error: workspaceError } = await supabase
         .from('workspaces')
         .delete()
         .eq('id', wkspId);
-      
       if (workspaceError) {
         console.error('Error deleting workspace:', workspaceError);
         alert(`Error deleting workspace: ${workspaceError.message}`);
         return;
       }
-
       // Clear local storage
       localStorage.removeItem(`folders-${wkspId}`);
       localStorage.removeItem(`resources-${wkspId}`);
@@ -1386,7 +1386,7 @@ useEffect(() => {
       alert('Workspace deleted successfully!');
     } catch (err) {
       console.error('Unexpected error deleting workspace:', err);
-      alert('Unexpected error occurred while deleting workspace');
+      alert('Unexpected error occurred while deleting workspace: ' + err.message);
     }
   }
 
