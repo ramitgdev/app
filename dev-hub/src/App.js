@@ -31,6 +31,18 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DownloadIcon from '@mui/icons-material/Download';
 import CommentIcon from '@mui/icons-material/Comment';
 import StarIcon from '@mui/icons-material/Star';
+import MicIcon from '@mui/icons-material/Mic';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import PauseIcon from '@mui/icons-material/Pause';
+import AudiotrackIcon from '@mui/icons-material/Audiotrack';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
+import DrawIcon from '@mui/icons-material/Draw';
+import AnalyticsIcon from '@mui/icons-material/Analytics';
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import VideocamIcon from '@mui/icons-material/Videocam';
+import WaveformIcon from '@mui/icons-material/GraphicEq';
+import EnhancedAudioRecorder from './EnhancedAudioRecorder';
+import AICodeReviewer from './AICodeReviewer';
 
 
 window.onerror = function (msg, url, line, col, error) {
@@ -1646,6 +1658,14 @@ useEffect(() => {
                   <GoogleMeetAndCalendar />
                 </Card>
               )}
+              
+              {/* AI Code Reviewer for the workspace */}
+              {selectedWksp && (
+                <AICodeReviewer 
+                  workspaceId={selectedWksp.id} 
+                  currentUser={user}
+                />
+              )}
               <Box sx={{ mb: 2 }}>
                 <Stack direction="row" alignItems="center" spacing={2}>
                   <Typography color="text.secondary">
@@ -1747,6 +1767,13 @@ useEffect(() => {
                           )}
                         </Card>
                       )}
+                      
+                      {/* Enhanced Audio Comments */}
+                      <EnhancedAudioRecorder 
+                        resourceId={ref.id} 
+                        currentUser={user} 
+                        workspaceId={selectedWksp.id}
+                      />
                     </Card>
                   ))}
                   {folderResources.length === 0 && (
