@@ -290,7 +290,23 @@ function WorkspaceCreator({ currentUser, onCreated }) {
       .insert([{ name, owner_id: currentUser.id }])
       .select().single();
     if (error) setMsg(error.message);
-    else { setMsg("Workspace created!"); setName(""); onCreated && onCreated(data); }
+    else {
+      // Add owner as a member
+      const memberRes = await supabase.from('workspace_members').insert([{
+        workspace_id: data.id,
+        user_email: currentUser.email,
+        user_id: currentUser.id,
+        status: 'accepted'
+      }]);
+      if (memberRes.error) {
+        setMsg('Workspace created, but failed to add owner as member: ' + memberRes.error.message);
+        console.error('Failed to add owner as member:', memberRes.error);
+      } else {
+        setMsg("Workspace created!");
+        setName("");
+        onCreated && onCreated(data);
+      }
+    }
   }
   return (
     <Card className="mui-card" sx={{ my: 2, p: 2, maxWidth: 400 }}>
@@ -318,7 +334,7 @@ async function sendEmailNotification(to, subject, message) {
 }
 
 // --- Update WorkspaceShare to send email on invite ---
-function WorkspaceShare({ workspaceId, currentUser, onShared }) {
+function WorkspaceShare({ workspaceId, currentUser, onShared, onInviteSuccess }) {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteMsg, setInviteMsg] = useState("");
   async function handleInvite() {
@@ -326,11 +342,16 @@ function WorkspaceShare({ workspaceId, currentUser, onShared }) {
     const { error } = await supabase
       .from('workspace_members')
       .insert([{ workspace_id: workspaceId, user_email: inviteEmail, invited_by: currentUser.id }]);
-    setInviteMsg(error ? error.message : "Invited!");
-    setInviteEmail("");
-    if (!error) {
-      await sendEmailNotification(inviteEmail, "You've been invited to a workspace!", `You have been invited by ${currentUser.email} to join a workspace. Please sign up or log in to accept the invite.`);
+    if (error) {
+      setInviteMsg(error.message);
+      alert('Failed to invite: ' + error.message);
+      console.error('Invite error:', error);
+      return;
     }
+    setInviteMsg("Invited!");
+    setInviteEmail("");
+    await sendEmailNotification(inviteEmail, "You've been invited to a workspace!", `You have been invited by ${currentUser.email} to join a workspace. Please sign up or log in to accept the invite.`);
+    onInviteSuccess && onInviteSuccess();
     onShared && onShared();
   }
   return (
@@ -1406,25 +1427,49 @@ useEffect(() => {
   useEffect(() => {
     async function claimInvitesAndRefresh() {
       if (!user) return;
+      
+      console.log('Claiming invites for user:', user.email);
+      
       // Find all invites for this email with no user_id
-      const { data: invites } = await supabase
+      const { data: invites, error: fetchError } = await supabase
         .from('workspace_members')
         .select('*')
         .eq('user_email', user.email)
         .is('user_id', null);
+        
+      if (fetchError) {
+        console.error('Error fetching invites:', fetchError);
+        return;
+      }
+      
+      console.log('Found pending invites:', invites);
+      
       if (invites && invites.length > 0) {
         for (const invite of invites) {
-          await supabase
+          console.log('Claiming invite:', invite.id);
+          const { error: updateError } = await supabase
             .from('workspace_members')
-            .update({ user_id: user.id })
+            .update({ 
+              user_id: user.id,
+              accepted_at: new Date().toISOString()
+            })
             .eq('id', invite.id);
+            
+          if (updateError) {
+            console.error('Error claiming invite:', updateError);
+          }
         }
-        // Re-fetch collaborators for all workspaces this user is in
-        if (selectedWksp) fetchCollaboratorsWithPresence(selectedWksp.id).then(setCollaborators);
+        
+        // Re-fetch workspaces and collaborators
+        await fetchWorkspaces();
+        if (selectedWksp) {
+          const updatedCollaborators = await fetchCollaboratorsWithPresence(selectedWksp.id);
+          setCollaborators(updatedCollaborators);
+        }
       }
     }
     claimInvitesAndRefresh();
-  }, [user]);
+  }, [user, selectedWksp]);
 
   // --- Presence system: update last_seen on login and interval (15s, 1 min online) ---
   useEffect(() => {
@@ -1567,7 +1612,12 @@ useEffect(() => {
               </ListItem>
             )}
           </List>
-          {showShare && <WorkspaceShare workspaceId={showShare} currentUser={user} onShared={() => setShowShare(null)} />}
+          {showShare && <WorkspaceShare workspaceId={showShare} currentUser={user} onShared={() => setShowShare(null)} onInviteSuccess={async () => {
+  if (selectedWksp) {
+    const updated = await fetchCollaboratorsWithPresence(selectedWksp.id);
+    setCollaborators(updated);
+  }
+}} />}
         </Card>
         <Box sx={{ mt: 4, textAlign: 'center' }}>
           <Button variant="outlined" color="secondary" startIcon={<LogoutIcon />} onClick={async () => { await supabase.auth.signOut(); }}>Sign out</Button>
@@ -1624,7 +1674,7 @@ useEffect(() => {
                       const user = collaborators.users.find(u => u.id === mem.user_id);
                       const isAccepted = !!mem.user_id;
                       const lastSeen = user?.last_seen ? new Date(user.last_seen) : null;
-                      const online = lastSeen && (Date.now() - lastSeen.getTime() < 2*60*1000);
+                      const online = isAccepted && lastSeen && (Date.now() - lastSeen.getTime() < 2*60*1000);
                       return (
                         <ListItem key={mem.id}>
                           <ListItemIcon>
@@ -1633,8 +1683,14 @@ useEffect(() => {
                           <ListItemText
                             primary={<>
                               {mem.user_email}
-                              {isAccepted ? <span style={{color:'#4caf50',fontWeight:600,marginLeft:8}}>● accepted</span> : <span style={{color:'#b88600',fontWeight:600,marginLeft:8}}>● invited</span>}
-                              <span style={{color: online ? '#4caf50' : '#888', fontWeight:600, marginLeft:8}}>● {online ? 'online' : 'offline'}</span>
+                              {isAccepted ? (
+                                <>
+                                  <span style={{color:'#4caf50',fontWeight:600,marginLeft:8}}>● accepted</span>
+                                  <span style={{color: online ? '#4caf50' : '#888', fontWeight:600, marginLeft:8}}>● {online ? 'online' : 'offline'}</span>
+                                </>
+                              ) : (
+                                <span style={{color:'#b88600',fontWeight:600,marginLeft:8}}>● pending invitation</span>
+                              )}
                             </>}
                           />
                         </ListItem>
