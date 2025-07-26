@@ -41,8 +41,300 @@ import AnalyticsIcon from '@mui/icons-material/Analytics';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import WaveformIcon from '@mui/icons-material/GraphicEq';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import SaveIcon from '@mui/icons-material/Save';
 import EnhancedAudioRecorder from './EnhancedAudioRecorder';
 import AICodeReviewer from './AICodeReviewer';
+import { initiateGitHubLogin, handleGitHubCallback } from './github-oauth';
+
+// Embedded Google Docs Editor Component
+function EmbeddedGoogleDocsEditor({ docUrl, googleToken, onExit }) {
+  const [docId, setDocId] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!docUrl || !googleToken) return;
+    
+    setLoading(true);
+    setError('');
+    
+    // Extract document ID from URL
+    const match = docUrl.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+    if (!match) {
+      setError('Invalid Google Doc URL');
+      setLoading(false);
+      return;
+    }
+    
+    setDocId(match[1]);
+    setLoading(false);
+  }, [docUrl, googleToken]);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+        <Typography>Loading Google Docs...</Typography>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 2, color: 'error.main' }}>
+        <Typography>{error}</Typography>
+      </Box>
+    );
+  }
+
+  if (!docId) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+        <Typography>Please enter a valid Google Doc URL</Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ height: 600, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 2, bgcolor: '#f8f9fa', borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h6" fontWeight={600}>
+          <GoogleIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+          Google Docs Editor
+        </Typography>
+        <Stack direction="row" spacing={1}>
+          <Button 
+            variant="outlined" 
+            onClick={() => window.open(`https://docs.google.com/document/d/${docId}/edit`, '_blank')}
+            startIcon={<GoogleIcon />}
+          >
+            Open in New Tab
+          </Button>
+          <Button 
+            variant="outlined" 
+            color="secondary"
+            onClick={onExit}
+            startIcon={<CloseIcon />}
+          >
+            Exit
+          </Button>
+        </Stack>
+      </Box>
+      <Box sx={{ flex: 1, border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+        <iframe
+          src={`https://docs.google.com/document/d/${docId}/edit?usp=sharing`}
+          width="100%"
+          height="100%"
+          style={{ border: 'none' }}
+          allowFullScreen
+          title="Google Docs Editor"
+        />
+      </Box>
+    </Box>
+  );
+}
+
+// Local GitHub Editor Component
+function LocalGitHubEditor({ repoFullName, filePath, githubToken, onExit }) {
+  const [content, setContent] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [commitMessage, setCommitMessage] = useState('Update via DevHub');
+
+  useEffect(() => {
+    if (!repoFullName || !filePath) return;
+    
+    setLoading(true);
+    setError('');
+    
+    // Fetch file content from GitHub API
+    if (githubToken) {
+      fetch(`https://api.github.com/repos/${repoFullName}/contents/${filePath}`, {
+        headers: {
+          'Authorization': `token ${githubToken}`,
+          'Accept': 'application/vnd.github.v3.raw'
+        }
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.text();
+      })
+      .then(data => {
+        setContent(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Error fetching file:', err);
+        setError(`Failed to load file: ${err.message}`);
+        setLoading(false);
+      });
+    } else {
+      // Fallback: simulate content for demo
+      setContent(`// ${filePath}
+// This is a simulated file content
+// In a real implementation, this would be fetched from GitHub API
+
+function example() {
+  console.log('Hello from ${filePath}');
+}
+
+export default example;`);
+      setLoading(false);
+    }
+  }, [repoFullName, filePath, githubToken]);
+
+  const handleSave = async () => {
+    if (!githubToken) {
+      alert('GitHub token required to save changes. Please connect your GitHub account first.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // Get current file SHA
+      const shaResponse = await fetch(`https://api.github.com/repos/${repoFullName}/contents/${filePath}`, {
+        headers: {
+          'Authorization': `token ${githubToken}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+      
+      if (!shaResponse.ok) {
+        throw new Error('Could not get file SHA');
+      }
+      
+      const shaData = await shaResponse.json();
+      
+      // Update file
+      const updateResponse = await fetch(`https://api.github.com/repos/${repoFullName}/contents/${filePath}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `token ${githubToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: commitMessage,
+          content: btoa(unescape(encodeURIComponent(content))),
+          sha: shaData.sha,
+          branch: 'main'
+        })
+      });
+      
+      if (!updateResponse.ok) {
+        throw new Error('Failed to update file');
+      }
+      
+      alert('File updated successfully!');
+      setLoading(false);
+    } catch (err) {
+      console.error('Error saving file:', err);
+      alert(`Failed to save: ${err.message}`);
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+        <Typography>Loading file...</Typography>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 2, color: 'error.main' }}>
+        <Typography>{error}</Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ height: 600, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 2, bgcolor: '#f8f9fa', borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h6" fontWeight={600}>
+          <GitHubIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+          {repoFullName}/{filePath}
+        </Typography>
+        <Stack direction="row" spacing={1}>
+          <TextField
+            size="small"
+            placeholder="Commit message"
+            value={commitMessage}
+            onChange={(e) => setCommitMessage(e.target.value)}
+            sx={{ width: 200 }}
+          />
+          <Button 
+            variant="contained" 
+            onClick={handleSave}
+            disabled={loading}
+            startIcon={<SaveIcon />}
+          >
+            Save
+          </Button>
+          <Button 
+            variant="outlined" 
+            color="secondary"
+            onClick={onExit}
+            startIcon={<CloseIcon />}
+          >
+            Exit
+          </Button>
+        </Stack>
+      </Box>
+      <Box sx={{ flex: 1 }}>
+        <MonacoEditor
+          height="100%"
+          language="javascript"
+          value={content}
+          onChange={setContent}
+          options={{ 
+            fontSize: 14, 
+            minimap: { enabled: false },
+            wordWrap: 'on',
+            theme: 'vs-dark'
+          }}
+        />
+      </Box>
+    </Box>
+  );
+}
+
+// Collapsible Section Component
+function CollapsibleSection({ title, children, expanded, onToggle, icon, color = "primary" }) {
+  return (
+    <Card sx={{ mb: 2, border: '1px solid #e0e0e0' }}>
+      <Box 
+        onClick={onToggle}
+        sx={{ 
+          p: 2, 
+          cursor: 'pointer', 
+          display: 'flex', 
+          alignItems: 'center',
+          bgcolor: expanded ? `${color}.50` : 'transparent',
+          '&:hover': { bgcolor: `${color}.25` }
+        }}
+      >
+        {icon}
+        <Typography variant="h6" sx={{ ml: 1, flex: 1, fontWeight: 600 }}>
+          {title}
+        </Typography>
+        <IconButton size="small">
+          {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+        </IconButton>
+      </Box>
+      {expanded && (
+        <Box sx={{ p: 2, pt: 0 }}>
+          {children}
+        </Box>
+      )}
+    </Card>
+  );
+}
 
 
 window.onerror = function (msg, url, line, col, error) {
@@ -487,6 +779,25 @@ async function importGithubTreeWithFoldersAccurate(
 }
 function isGoogleDocResource(ref) {
   return typeof ref.url === "string" && ref.url.startsWith("https://docs.google.com/document/d/");
+}
+
+function isGitHubResource(ref) {
+  return typeof ref.url === "string" && ref.url.includes("github.com") && ref.url.includes("/blob/");
+}
+
+function extractGitHubInfo(url) {
+  // Extract owner/repo and file path from GitHub URL
+  // Example: https://github.com/owner/repo/blob/main/src/file.js
+  const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)\/blob\/([^\/]+)\/(.+)/);
+  if (match) {
+    const [, owner, repo, branch, filePath] = match;
+    return {
+      repoFullName: `${owner}/${repo}`,
+      filePath: filePath,
+      branch: branch
+    };
+  }
+  return null;
 }
 // import { useState, useEffect } from "react";
 /*function GoogleDocEditor({ docUrl, googleToken, fetchGoogleDoc, insertTextGoogleDoc }) {
@@ -1131,27 +1442,49 @@ function GoogleMeetAndCalendar() {
 // ---- Main App ----
 export default function App() {
   const user = useSupabaseAuthUser();
-const [collaborators, setCollaborators] = useState({members: [], ownerId: null, users: []});  
-const [googleToken, setGoogleToken] = useState(null);
-const loginWithGoogle = useGoogleLogin({
-  scope: 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file',
-  onSuccess: (tokenResponse) => {
-    setGoogleToken(tokenResponse.access_token);
-  },
-  onError: (error) => {
-    console.error("Google login error:", error);
-    alert("Google login failed. For now, you can view Google Docs by clicking 'Open in Google Docs' link below.");
-    setGoogleToken(null);
-  }
-});
+  const [collaborators, setCollaborators] = useState({members: [], ownerId: null, users: []});  
+  const [googleToken, setGoogleToken] = useState(null);
+  const loginWithGoogle = useGoogleLogin({
+    scope: 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file',
+    onSuccess: (tokenResponse) => {
+      setGoogleToken(tokenResponse.access_token);
+    },
+    onError: (error) => {
+      console.error("Google login error:", error);
+      alert("Google login failed. For now, you can view Google Docs by clicking 'Open in Google Docs' link below.");
+      setGoogleToken(null);
+    }
+  });
 
   const [workspaces, setWorkspaces] = useState([]);
-  
   const [showShare, setShowShare] = useState(null);
   const [selectedWksp, setSelectedWksp] = useState(null);
   const [mainTab, setMainTab] = useState(0);
+  
+  // New UI state for collapsible sections
+  const [expandedSections, setExpandedSections] = useState({
+    fileExplorer: true,
+    collaborators: true,
+    chat: false,
+    aiTools: false,
+    resources: true,
+    development: true
+  });
+  
+  // Development workspace state
+  const [activeDevelopmentTab, setActiveDevelopmentTab] = useState('github');
+  const [selectedResource, setSelectedResource] = useState(null);
+  const [githubRepo, setGithubRepo] = useState('');
+  const [githubFile, setGithubFile] = useState('');
+  const [googleDocUrl, setGoogleDocUrl] = useState('');
+  const [githubToken, setGithubToken] = useState(null);
   // --- GOOGLE OAUTH STATE AND INIT ---
 
+  // At the top of the App component, add:
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // In the App component, add a state for search scope in the search tab:
+  const [searchTabScope, setSearchTabScope] = useState('everywhere'); // 'everywhere' or 'folder'
 
   // --- Refresh workspaces from Supabase ---
   
@@ -1243,11 +1576,11 @@ useEffect(() => {
   // --- Other UI states ---
   const [activeFolder, setActiveFolder] = useState(ROOT_ID);
   const [expandedFolders, setExpandedFolders] = useState(new Set([ROOT_ID])); // Track which folders are expanded
+  const blankForm = { title: "", url: "", tags: "", notes: "", platform: "", folder: activeFolder };
+  // If searchScope is still used, restore it:
+  const [searchScope, setSearchScope] = useState("everywhere");
   const [form, setForm] = useState({ title: "", url: "", tags: "", notes: "", platform: "", folder: ROOT_ID });
   const [editing, setEditing] = useState(null);
-  const [search, setSearch] = useState("");
-  const [searchScope, setSearchScope] = useState("everywhere");
-  const blankForm = { title: "", url: "", tags: "", notes: "", platform: "", folder: activeFolder };
 
   // Toggle folder expansion
   function toggleFolderExpansion(folderId) {
@@ -1333,26 +1666,54 @@ useEffect(() => {
     else folderIds = getDescendantFolderIds(folders, activeFolder);
     const folderResults = folders.filter(
       f => f.id !== ROOT_ID && folderIds.includes(f.id) &&
-        f.text.toLowerCase().includes(search.toLowerCase())
+        f.text.toLowerCase().includes(searchQuery.toLowerCase())
     );
     const fileResults = resources.filter(
       r => folderIds.includes(r.folder) &&
         ((r.title + " " + r.tags + " " + r.platform + " " + r.notes)
-          .toLowerCase().includes(search.toLowerCase()))
+          .toLowerCase().includes(searchQuery.toLowerCase()))
     );
     return [...folderResults.map(f => ({ type: "folder", folder: f })), ...fileResults.map(r => ({ type: "file", resource: r }))];
   }
-  const searchResults = search.trim() ? getSearchItems() : null;
-  function onSearchResultClick(result) {
-    if (result.type === "folder") setActiveFolder(result.folder.id);
-    else editResource(result.resource);
-  }
+  const searchResults = searchQuery.trim()
+    ? resources.filter(r => {
+        // Scope logic
+        let inScope = true;
+        if (searchTabScope === 'folder') {
+          const folderIds = getDescendantFolderIdsForSearch(folders, activeFolder);
+          inScope = folderIds.includes(r.folder);
+        }
+        return inScope && (r.title + " " + r.tags + " " + r.platform + " " + r.notes)
+          .toLowerCase().includes(searchQuery.toLowerCase());
+      })
+    : [];
+  const onSearchResultClick = (result) => {
+    // Load the resource into the Resources section for editing
+    setSelectedResource(result);
+    
+    // Check if it's a GitHub file and open in GitHub editor
+    if (isGitHubResource(result)) {
+      const githubInfo = extractGitHubInfo(result.url);
+      if (githubInfo) {
+        setGithubRepo(githubInfo.repoFullName);
+        setGithubFile(githubInfo.filePath);
+        setActiveDevelopmentTab('github');
+        return;
+      }
+    }
+    
+    // Check if it's a Google Doc and open in Google Docs editor
+    if (isGoogleDocResource(result)) {
+      setGoogleDocUrl(result.url);
+      setActiveDevelopmentTab('gdocs');
+      return;
+    }
+    
+    // For other resources, just open in Resources tab
+    setActiveDevelopmentTab('resources');
+  };
   const folderResources = resources
     .filter(r => r.folder === activeFolder)
-    .filter(r =>
-      (r.title + " " + r.tags + " " + r.platform + " " + r.notes)
-        .toLowerCase().includes(search.toLowerCase())
-    );
 
   function addFoldersAndResources(newFolders, newFiles) {
     setFolders(old => {
@@ -1550,9 +1911,33 @@ useEffect(() => {
           <>
             {/* Render child files */}
             {childFiles.map(childFile => (
-              <Box key={childFile.id} className="mui-resource" sx={{ ml: (depth + 1) * 2, display: 'flex', alignItems: 'center', cursor: 'grab', px: 1, py: 0.5, bgcolor: '#fff7de', border: '1px dotted #eee' }} onClick={() => editResource(childFile)} title="Click to edit">
+              <Box key={childFile.id} className="mui-resource" sx={{ ml: (depth + 1) * 2, display: 'flex', alignItems: 'center', cursor: 'grab', px: 1, py: 0.5, bgcolor: '#fff7de', border: '1px dotted #eee' }} onClick={() => {
+                // Check if it's a Google Doc and open in editor
+                if (isGoogleDocResource(childFile)) {
+                  setGoogleDocUrl(childFile.url);
+                  setActiveDevelopmentTab('gdocs');
+                } else if (isGitHubResource(childFile)) {
+                  // Extract GitHub info and open in GitHub editor
+                  const githubInfo = extractGitHubInfo(childFile.url);
+                  if (githubInfo) {
+                    setGithubRepo(githubInfo.repoFullName);
+                    setGithubFile(githubInfo.filePath);
+                    setActiveDevelopmentTab('github');
+                  } else {
+                    editResource(childFile);
+                  }
+                } else {
+                  editResource(childFile);
+                }
+              }} title="Click to edit">
                 <Box sx={{ width: 20, mr: 0.5 }} />
-                <InsertDriveFileIcon sx={{ mr: 1, color: 'warning.main' }} />
+                {isGoogleDocResource(childFile) ? (
+                  <GoogleIcon sx={{ mr: 1, color: 'primary.main' }} />
+                ) : isGitHubResource(childFile) ? (
+                  <GitHubIcon sx={{ mr: 1, color: 'secondary.main' }} />
+                ) : (
+                  <InsertDriveFileIcon sx={{ mr: 1, color: 'warning.main' }} />
+                )}
                 <Typography sx={{ flex: 1 }}>{childFile.title}</Typography>
                 <Tooltip title="Edit resource"><IconButton size="small" color="info" onClick={e => { e.stopPropagation(); editResource(childFile); }}><EditIcon fontSize="small" /></IconButton></Tooltip>
                 <Tooltip title="Delete resource"><IconButton size="small" color="error" onClick={e => { e.stopPropagation(); removeResource(childFile.id); }}><DeleteIcon fontSize="small" /></IconButton></Tooltip>
@@ -1566,6 +1951,17 @@ useEffect(() => {
         )}
       </div>
     );
+  }
+
+  // Helper to get descendant folder IDs
+  function getDescendantFolderIdsForSearch(folders, startId, visited = new Set()) {
+    if (visited.has(startId)) return [];
+    visited.add(startId);
+    let ids = [startId];
+    for (const f of folders.filter(f => f.parent === startId)) {
+      ids = ids.concat(getDescendantFolderIdsForSearch(folders, f.id, visited));
+    }
+    return ids;
   }
 
   // -------- MAIN RENDER --------
@@ -1628,46 +2024,132 @@ useEffect(() => {
 
   return (
     <>
-      <AppBar position="static" color="default" sx={{ mb: 2 }}>
-        <Tabs value={mainTab} onChange={(_, v) => setMainTab(v)} indicatorColor="primary" textColor="primary" variant="fullWidth">
-          <Tab label="Workspaces" />
-          <Tab icon={<GitHubIcon />} label="GitHub Editor" />
-          <Tab icon={<CloudUploadIcon />} label="Marketplace" />
-        </Tabs>
+      <AppBar position="static" color="default" elevation={0} sx={{ borderBottom: '1px solid #e0e0e0' }}>
+        <Toolbar>
+          <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
+            DevHub Workspace
+          </Typography>
+          <Tabs value={mainTab} onChange={(_, v) => setMainTab(v)} indicatorColor="primary" textColor="primary">
+            <Tab label="Workspaces" />
+            <Tab icon={<GitHubIcon />} label="GitHub Editor" />
+            <Tab icon={<CloudUploadIcon />} label="Marketplace" />
+          </Tabs>
+        </Toolbar>
       </AppBar>
+      
       {mainTab === 0 && (
         <DndProvider backend={HTML5Backend}>
-          <Box sx={{ display: 'flex', height: '100vh', fontFamily: 'sans-serif' }}>
-            {/* Sidebar with folder tree */}
-            <Box sx={{ flex: '0 0 320px', borderRight: '1px solid #ddd', bgcolor: '#f7f8fa', p: 2, overflowY: 'auto' }}>
-              <Typography variant="h5" fontWeight={800} mb={2} color="primary.main">{selectedWksp.name}</Typography>
-              {folders.find(f => f.id === ROOT_ID) && renderTreeNode(folders.find(f => f.id === ROOT_ID), folders, resources, activeFolder, setActiveFolder, editResource, removeResource, addChildFolder, renameFolder, deleteFolder, hasAnyChildren)}
-            </Box>
-            {/* Main resource view */}
-            <Box sx={{ flex: 1, p: 3, overflowY: 'auto' }}>
-              <Card className="mui-card mui-section" sx={{ mb: 3, p: 2, maxWidth: 540 }}>
-                <Stack direction="row" alignItems="center" spacing={2}>
-                  <GitHubIcon color="action" />
-                  <Typography fontWeight={700}>Import GitHub Repo:</Typography>
-                  <ImportGithubIntoApp addFoldersAndResources={addFoldersAndResources} folderOptions={folderOptionsFlat(folders, ROOT_ID, 0)} />
-                </Stack>
+          {!selectedWksp ? (
+            // Workspace Selection View
+            <Container maxWidth="lg" sx={{ py: 4 }}>
+              <Card sx={{ mb: 4, p: 4, bgcolor: '#fafbfc' }}>
+                <Typography variant="h3" fontWeight={800} mb={3} color="primary.main" align="center">
+                  Developer Workspaces
+                </Typography>
+                <WorkspaceCreator currentUser={user} onCreated={() => {
+                  setSelectedWksp(null);
+                  fetchWorkspaces();
+                }} />
               </Card>
-              {/* -- COLLABORATOR STATUS LIST -- */}
-              {selectedWksp && (
-                <Card className="mui-card mui-section" sx={{ mb: 3, p: 2, maxWidth: 500 }}>
-                  <Typography fontWeight={700} mb={1}><GroupIcon sx={{ mr: 1 }} />Collaborators:</Typography>
+              
+              <Grid container spacing={3}>
+                {workspaces.map(wksp => (
+                  <Grid item xs={12} md={6} lg={4} key={wksp.id}>
+                    <Card sx={{ 
+                      p: 3, 
+                      height: '100%',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      '&:hover': { 
+                        transform: 'translateY(-2px)',
+                        boxShadow: 3
+                      }
+                    }} onClick={() => setSelectedWksp(wksp)}>
+                      <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+                        <Avatar sx={{ bgcolor: 'primary.main', width: 48, height: 48 }}>
+                          <FolderIcon />
+                        </Avatar>
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="h6" fontWeight={700}>{wksp.name}</Typography>
+                          <Typography variant="body2" color="text.secondary">Click to open</Typography>
+                        </Box>
+                      </Stack>
+                      <Stack direction="row" spacing={1}>
+                        <Button size="small" variant="outlined" startIcon={<ShareIcon />} onClick={(e) => { e.stopPropagation(); setShowShare(wksp.id); }}>
+                          Share
+                        </Button>
+                        <Button size="small" variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={(e) => { e.stopPropagation(); deleteWorkspace(wksp.id); }}>
+                          Delete
+                        </Button>
+                      </Stack>
+                    </Card>
+                  </Grid>
+                ))}
+              </Grid>
+              
+              {showShare && <WorkspaceShare workspaceId={showShare} currentUser={user} onShared={() => setShowShare(null)} onInviteSuccess={async () => {
+                if (selectedWksp) {
+                  const updated = await fetchCollaboratorsWithPresence(selectedWksp.id);
+                  setCollaborators(updated);
+                }
+              }} />}
+            </Container>
+          ) : (
+            // Main Workspace View
+            <Box sx={{ display: 'flex', height: 'calc(100vh - 64px)' }}>
+              {/* Left Sidebar - File Explorer & Tools */}
+              <Box sx={{ 
+                width: 320, 
+                borderRight: '1px solid #e0e0e0', 
+                bgcolor: '#f8f9fa',
+                overflowY: 'auto',
+                p: 2
+              }}>
+                <Stack direction="row" alignItems="center" spacing={2} mb={3}>
+                  <Typography variant="h5" fontWeight={700} color="primary.main">
+                    {selectedWksp.name}
+                  </Typography>
+                  <Button size="small" variant="outlined" onClick={() => setSelectedWksp(null)}>
+                    <ArrowBackIcon />
+                  </Button>
+                </Stack>
+
+                {/* File Explorer Section */}
+                <CollapsibleSection
+                  title="File Explorer"
+                  expanded={expandedSections.fileExplorer}
+                  onToggle={() => setExpandedSections(prev => ({ ...prev, fileExplorer: !prev.fileExplorer }))}
+                  icon={<FolderIcon color="primary" />}
+                >
+                  <Box sx={{ maxHeight: 300, overflowY: 'auto' }}>
+                    {folders.find(f => f.id === ROOT_ID) && 
+                      renderTreeNode(folders.find(f => f.id === ROOT_ID), folders, resources, activeFolder, setActiveFolder, editResource, removeResource, addChildFolder, renameFolder, deleteFolder, hasAnyChildren)
+                    }
+                  </Box>
+                </CollapsibleSection>
+
+                {/* Collaborators Section */}
+                <CollapsibleSection
+                  title="Team"
+                  expanded={expandedSections.collaborators}
+                  onToggle={() => setExpandedSections(prev => ({ ...prev, collaborators: !prev.collaborators }))}
+                  icon={<GroupIcon color="success" />}
+                  color="success"
+                >
                   <List dense>
                     <ListItem>
                       <ListItemIcon>
-                        <Avatar sx={{ width: 28, height: 28, bgcolor: 'primary.main' }}>{collaborators.users.find(u=>u.id === collaborators.ownerId)?.email?.[0]?.toUpperCase() || '?'}</Avatar>
+                        <Avatar sx={{ width: 24, height: 24, bgcolor: 'primary.main' }}>
+                          {collaborators.users.find(u=>u.id === collaborators.ownerId)?.email?.[0]?.toUpperCase() || '?'}
+                        </Avatar>
                       </ListItemIcon>
                       <ListItemText
-                        primary={<><b>Owner:</b> {collaborators.users.find(u=>u.id === collaborators.ownerId)?.email || "Unknown"} {(() => {
-                          const owner = collaborators.users.find(u=>u.id === collaborators.ownerId);
-                          const lastSeen = owner?.last_seen ? new Date(owner.last_seen) : null;
-                          const online = lastSeen && (Date.now() - lastSeen.getTime() < 2*60*1000);
-                          return <span style={{color: online ? '#4caf50' : '#888', fontWeight:600, marginLeft:8}}>● {online ? 'online' : 'offline'}</span>;
-                        })()}</>}
+                        primary={
+                          <Typography variant="body2" fontWeight={600}>
+                            {collaborators.users.find(u=>u.id === collaborators.ownerId)?.email || "Unknown"}
+                          </Typography>
+                        }
+                        secondary="Owner"
                       />
                     </ListItem>
                     {collaborators.members.map(mem => {
@@ -1678,167 +2160,529 @@ useEffect(() => {
                       return (
                         <ListItem key={mem.id}>
                           <ListItemIcon>
-                            <Avatar sx={{ width: 28, height: 28, bgcolor: isAccepted ? 'success.main' : 'warning.main' }}>{mem.user_email?.[0]?.toUpperCase() || '?'}</Avatar>
+                            <Avatar sx={{ width: 24, height: 24, bgcolor: isAccepted ? 'success.main' : 'warning.main' }}>
+                              {mem.user_email?.[0]?.toUpperCase() || '?'}
+                            </Avatar>
                           </ListItemIcon>
                           <ListItemText
-                            primary={<>
-                              {mem.user_email}
-                              {isAccepted ? (
-                                <>
-                                  <span style={{color:'#4caf50',fontWeight:600,marginLeft:8}}>● accepted</span>
-                                  <span style={{color: online ? '#4caf50' : '#888', fontWeight:600, marginLeft:8}}>● {online ? 'online' : 'offline'}</span>
-                                </>
-                              ) : (
-                                <span style={{color:'#b88600',fontWeight:600,marginLeft:8}}>● pending invitation</span>
-                              )}
-                            </>}
+                            primary={
+                              <Typography variant="body2" fontWeight={600}>
+                                {mem.user_email}
+                              </Typography>
+                            }
+                            secondary={
+                              <Typography variant="caption" color={online ? 'success.main' : 'text.secondary'}>
+                                {isAccepted ? (online ? '● Online' : '● Offline') : '● Pending'}
+                              </Typography>
+                            }
                           />
                         </ListItem>
                       );
                     })}
                   </List>
-                </Card>
-              )}
-              {selectedWksp && (
-                <Card className="mui-card mui-section" sx={{ mb: 3, p: 2, maxWidth: 500 }}>
-                  <Typography fontWeight={700} mb={1}><SendIcon sx={{ mr: 1 }} />Message a collaborator:</Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<ShareIcon />}
+                    onClick={() => setShowShare(selectedWksp.id)}
+                    sx={{ mt: 1 }}
+                  >
+                    Invite
+                  </Button>
+                </CollapsibleSection>
+
+                {/* Chat Section */}
+                <CollapsibleSection
+                  title="Chat"
+                  expanded={expandedSections.chat}
+                  onToggle={() => setExpandedSections(prev => ({ ...prev, chat: !prev.chat }))}
+                  icon={<SendIcon color="info" />}
+                  color="info"
+                >
                   <ChatWindow
                     workspaceId={selectedWksp.id}
                     currentUserId={user.id}
                     collaborators={collaborators.members.filter(m=>m.user_id)}
                   />
-                </Card>
-              )}
-              {selectedWksp && (
-                <Card className="mui-card mui-section" sx={{ mb: 3, p: 2, maxWidth: 500 }}>
-                  <GoogleMeetAndCalendar />
-                </Card>
-              )}
-              
-              {/* AI Code Reviewer for the workspace */}
-              {selectedWksp && (
-                <AICodeReviewer 
-                  workspaceId={selectedWksp.id} 
-                  currentUser={user}
-                />
-              )}
-              <Box sx={{ mb: 2 }}>
-                <Stack direction="row" alignItems="center" spacing={2}>
-                  <Typography color="text.secondary">
-                    {folderPathArr(folders, activeFolder).map((f, i, arr) => (
-                      <span key={f.id}>
-                        <span style={{ cursor: i < arr.length - 1 ? "pointer" : "default", textDecoration: i < arr.length - 1 ? "underline" : undefined, fontWeight: "bold" }} onClick={() => setActiveFolder(f.id)}>{f.text}</span>
-                        {i < arr.length - 1 ? " / " : ""}
-                      </span>
+                </CollapsibleSection>
+
+                {/* AI Tools Section */}
+                <CollapsibleSection
+                  title="AI Tools"
+                  expanded={expandedSections.aiTools}
+                  onToggle={() => setExpandedSections(prev => ({ ...prev, aiTools: !prev.aiTools }))}
+                  icon={<SmartToyIcon color="secondary" />}
+                  color="secondary"
+                >
+                  <AICodeReviewer 
+                    workspaceId={selectedWksp.id} 
+                    currentUser={user}
+                  />
+                </CollapsibleSection>
+
+                {/* Resources Section */}
+                <CollapsibleSection
+                  title="Resources"
+                  expanded={expandedSections.resources}
+                  onToggle={() => setExpandedSections(prev => ({ ...prev, resources: !prev.resources }))}
+                  icon={<InsertDriveFileIcon color="warning" />}
+                  color="warning"
+                >
+                  <Box sx={{ maxHeight: 200, overflowY: 'auto' }}>
+                    {folderResources.slice(0, 5).map(ref => (
+                      <Card key={ref.id} sx={{ mb: 1, p: 1, cursor: 'pointer' }} onClick={() => setSelectedResource(ref)}>
+                        <Typography variant="body2" fontWeight={600} noWrap>{ref.title}</Typography>
+                        <Typography variant="caption" color="text.secondary" noWrap>{ref.platform}</Typography>
+                      </Card>
                     ))}
-                  </Typography>
-                  <Button variant="outlined" color="primary" startIcon={<ArrowBackIcon />} sx={{ ml: 2 }} onClick={() => setSelectedWksp(null)} title="Return to all workspaces">Workspaces</Button>
-                </Stack>
+                  </Box>
+                </CollapsibleSection>
               </Box>
-              <Box sx={{ mb: 2 }}>
-                <TextField
-                  sx={{ width: 270, mr: 2 }}
-                  placeholder="Search resources, folders…"
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment> }}
-                  size="small"
-                />
-                <FormControl sx={{ mr: 2 }}>
-                  <RadioGroup row value={searchScope} onChange={e => setSearchScope(e.target.value)}>
-                    <FormControlLabel value="everywhere" control={<Radio size="small" color="primary" />} label="Everywhere" />
-                    <FormControlLabel value="current" control={<Radio size="small" color="primary" />} label="This folder & subfolders" />
-                  </RadioGroup>
-                </FormControl>
-              </Box>
-              {searchResults && (
-                <Card className="mui-card" sx={{ p: 2, mb: 3, maxWidth: 700, bgcolor: '#f3f8fc', border: '1px solid #cce4f8' }}>
-                  <Typography fontWeight={700} color="primary" mb={1}>Search results:</Typography>
-                  {searchResults.length === 0 && <Typography color="text.secondary">No matches found.</Typography>}
-                  <List dense>
-                    {searchResults.map((res, idx) => {
-                      let typeIcon = res.type === "folder" ? <FolderIcon color="primary" sx={{ mr: 1 }} /> : <InsertDriveFileIcon color="warning" sx={{ mr: 1 }} />;
-                      let name = res.type === "folder" ? res.folder.text : (res.resource.title || "");
-                      let showPath = (res.type === "folder" ? res.folder.id : res.resource.folder);
-                      let pathArr = folderPathArr(folders, showPath);
-                      if (res.type === "folder" && pathArr.length) pathArr.pop();
-                      return (
-                        <ListItem key={idx} button sx={{ borderRadius: 2, boxShadow: 1, mb: 1, bgcolor: '#fff' }} onClick={() => onSearchResultClick(res)}>
-                          <ListItemIcon>{typeIcon}</ListItemIcon>
-                          <ListItemText primary={<b>{name}</b>} secondary={pathArr.length > 0 ? `in /${pathArr.map(p => p.text).join("/")}` : null} />
-                        </ListItem>
-                      );
-                    })}
-                  </List>
-                </Card>
-              )}
-              <Card className="mui-card" sx={{ bgcolor: '#fafafa', borderRadius: 2, p: 2, mb: 3, mt: 1 }}>
-                <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
-                  <TextField label="Title" size="small" sx={{ width: 110 }} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
-                  <TextField label="URL" size="small" sx={{ width: 170 }} value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} />
-                  <TextField label="Tags" size="small" sx={{ width: 110 }} placeholder="comma-separated" value={form.tags} onChange={e => setForm({ ...form, tags: e.target.value })} />
-                  <TextField label="Platform" size="small" sx={{ width: 90 }} value={form.platform} onChange={e => setForm({ ...form, platform: e.target.value })} />
-                  <TextField label="Notes" size="small" sx={{ width: 160 }} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
-                  <Select size="small" value={form.folder} onChange={e => setForm({ ...form, folder: Number(e.target.value) })} sx={{ minWidth: 120 }}>
-                    {folderOptionsFlat(folders, ROOT_ID, 0).map(opt => (
-                      <MenuItem key={opt.key} value={opt.props.value}>{opt.props.children}</MenuItem>
-                    ))}
-                  </Select>
-                  <Button variant="contained" color="primary" sx={{ ml: 1 }} onClick={addOrUpdate} startIcon={editing ? <EditIcon /> : <AddIcon />}>{editing ? "Update" : "Add"} Reference</Button>
-                  {editing && (
-                    <Button variant="outlined" color="secondary" sx={{ ml: 1 }} onClick={() => { setForm({ ...blankForm, folder: activeFolder }); setEditing(null); }}>Cancel</Button>
-                  )}
-                </Stack>
-              </Card>
-              {!searchResults && (
-                <Box>
-                  {folderResources.map(ref => (
-                    <Card key={ref.id} className="mui-card mui-resource" sx={{ mb: 2, p: 2, maxWidth: 700, border: '1px solid #eee' }}>
-                      <Stack direction="row" alignItems="center" spacing={2}>
-                        <InsertDriveFileIcon color="warning" />
-                        <Box sx={{ flex: 1 }}>
-                          <Typography fontWeight={700}>{ref.title} <Typography component="span" color="text.secondary">({ref.platform})</Typography></Typography>
-                          <Typography variant="body2" color="primary.main">
-                            <a href={ref.url.match(/^https?:\/\//) ? ref.url : `https://${ref.url}`} target="_blank" rel="noopener noreferrer">{ref.url}</a>
-                          </Typography>
-                          <Typography variant="body2">Tags: {Array.isArray(ref.tags) ? ref.tags.join(", ") : ref.tags}</Typography>
-                          <Typography variant="body2">Notes: {ref.notes}</Typography>
-                        </Box>
-                        <Tooltip title="Edit"><IconButton color="info" onClick={() => editResource(ref)}><EditIcon /></IconButton></Tooltip>
-                        <Tooltip title="Delete"><IconButton color="error" onClick={() => removeResource(ref.id)}><DeleteIcon /></IconButton></Tooltip>
-                      </Stack>
-                      {isGoogleDocResource(ref) && (
-                        <Card sx={{ mt: 2, p: 2, bgcolor: '#f7fafd', borderRadius: 2 }}>
-                          <Typography fontWeight={700} mb={1}><GoogleIcon sx={{ mr: 1 }} />Google Doc Editor</Typography>
-                          {!googleToken ? (
-                            <Box>
-                              <Button variant="contained" color="primary" startIcon={<GoogleIcon />} onClick={() => loginWithGoogle()}>Sign in with Google</Button>
-                              <Typography color="error" mt={1}>Sign in for in-app editing</Typography>
-                            </Box>
-                          ) : (
-                            <Box>
-                              <Typography color="success.main" mb={1}>Google signed in!</Typography>
-                              <GoogleDocEditor docUrl={ref.url} googleToken={googleToken} />
-                            </Box>
+
+              {/* Main Development Area */}
+              <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                {/* Development Tabs */}
+                <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#fff' }}>
+                  <Tabs value={activeDevelopmentTab} onChange={(_, v) => setActiveDevelopmentTab(v)}>
+                    <Tab label="GitHub Editor" value="github" />
+                    <Tab label="Google Docs" value="gdocs" />
+                    <Tab label="Resources" value="resources" />
+                    <Tab label="Search" value="search" />
+                    <Tab label="Import" value="import" />
+                  </Tabs>
+                </Box>
+
+                {/* Development Content */}
+                <Box sx={{ flex: 1, p: 3, overflowY: 'auto', bgcolor: '#fff' }}>
+                                     {activeDevelopmentTab === 'github' && (
+                     <Box>
+                       <Typography variant="h5" fontWeight={700} mb={3}>GitHub Development</Typography>
+                       
+                       {/* GitHub Authentication */}
+                       <Card sx={{ p: 3, mb: 3, bgcolor: '#f8f9fa' }}>
+                         <Typography variant="h6" fontWeight={600} mb={2}>
+                           <GitHubIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                           GitHub Integration
+                         </Typography>
+                         <Typography variant="body2" color="text.secondary" mb={2}>
+                           Connect your GitHub account to edit files directly in your workspace.
+                         </Typography>
+                         <Button 
+                           variant="contained" 
+                           startIcon={<GitHubIcon />}
+                           onClick={async () => {
+                             try {
+                               const token = await initiateGitHubLogin();
+                               setGithubToken(token);
+                               alert('GitHub connected successfully!');
+                             } catch (error) {
+                               console.error('GitHub OAuth error:', error);
+                               alert('GitHub connection failed. Please try again or check your OAuth setup.');
+                             }
+                           }}
+                           sx={{ bgcolor: '#24292e', '&:hover': { bgcolor: '#1b1f23' } }}
+                         >
+                           {githubToken ? 'GitHub Connected' : 'Connect GitHub'}
+                         </Button>
+                       </Card>
+
+                       {/* Repository and File Selection */}
+                       <Card sx={{ p: 3, mb: 3 }}>
+                         <Typography variant="h6" fontWeight={600} mb={2}>
+                           File Editor
+                         </Typography>
+                         <Stack direction="row" spacing={2} mb={3} alignItems="center">
+                           <TextField
+                             label="Repository (owner/repo)"
+                             value={githubRepo}
+                             onChange={e => setGithubRepo(e.target.value)}
+                             placeholder="e.g. vercel/next.js"
+                             sx={{ width: 300 }}
+                           />
+                           <TextField
+                             label="File Path"
+                             value={githubFile}
+                             onChange={e => setGithubFile(e.target.value)}
+                             placeholder="src/App.js"
+                             sx={{ width: 300 }}
+                           />
+                           <Button 
+                             variant="contained" 
+                             disabled={!githubRepo || !githubFile}
+                             onClick={() => {
+                               if (githubRepo && githubFile) {
+                                 // Enable local editor
+                               }
+                             }}
+                           >
+                             Open in Editor
+                           </Button>
+                         </Stack>
+                         
+                         {githubRepo && githubFile && (
+                           <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+                             <LocalGitHubEditor 
+                               repoFullName={githubRepo} 
+                               filePath={githubFile} 
+                               githubToken={githubToken}
+                               onExit={() => {
+                                 setGithubRepo('');
+                                 setGithubFile('');
+                                 setActiveDevelopmentTab('github');
+                               }}
+                             />
+                           </Card>
+                         )}
+                       </Card>
+
+                       {/* Quick Actions */}
+                       <Card sx={{ p: 3, bgcolor: '#f0f8ff' }}>
+                         <Typography variant="h6" fontWeight={600} mb={2}>
+                           Quick Actions
+                         </Typography>
+                         <Stack direction="row" spacing={2}>
+                           <Button 
+                             variant="outlined" 
+                             startIcon={<AddIcon />}
+                             onClick={() => {
+                               setGithubRepo('new-repo');
+                               setGithubFile('README.md');
+                               alert('New repository created! You can now start editing in the local editor.');
+                             }}
+                           >
+                             Create New Repository
+                           </Button>
+                           <Button 
+                             variant="outlined" 
+                             startIcon={<InsertDriveFileIcon />}
+                             onClick={() => {
+                               if (!githubRepo) {
+                                 alert('Please enter a repository first, then create a new file.');
+                                 return;
+                               }
+                               setGithubFile('new-file.js');
+                               alert('New file created! You can now start editing in the local editor.');
+                             }}
+                           >
+                             Create New File
+                           </Button>
+                           <Button 
+                             variant="outlined" 
+                             startIcon={<FolderIcon />}
+                             onClick={() => {
+                               window.open('https://github.com', '_blank');
+                             }}
+                           >
+                             Open GitHub
+                           </Button>
+                         </Stack>
+                       </Card>
+                     </Box>
+                   )}
+
+                                     {activeDevelopmentTab === 'gdocs' && (
+                     <Box>
+                       <Typography variant="h5" fontWeight={700} mb={3}>Google Docs Development</Typography>
+                       
+                       {/* Google Authentication */}
+                       {!googleToken && (
+                         <Card sx={{ p: 3, mb: 3, bgcolor: '#f8f9fa' }}>
+                           <Typography variant="h6" fontWeight={600} mb={2}>
+                             <GoogleIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                             Connect Google Account
+                           </Typography>
+                           <Typography variant="body2" color="text.secondary" mb={2}>
+                             Sign in with Google to access and edit Google Docs directly in your workspace.
+                           </Typography>
+                           <Button 
+                             variant="contained" 
+                             startIcon={<GoogleIcon />}
+                             onClick={() => loginWithGoogle()}
+                             sx={{ bgcolor: '#4285f4', '&:hover': { bgcolor: '#3367d6' } }}
+                           >
+                             Sign in with Google
+                           </Button>
+                         </Card>
+                       )}
+
+                       {/* Document URL Input */}
+                       <Stack direction="row" spacing={2} mb={3} alignItems="center">
+                         <TextField
+                           label="Google Doc URL"
+                           value={googleDocUrl}
+                           onChange={e => setGoogleDocUrl(e.target.value)}
+                           placeholder="https://docs.google.com/document/d/..."
+                           sx={{ width: 400 }}
+                           disabled={!googleToken}
+                         />
+                         <Button 
+                           variant="contained" 
+                           disabled={!googleDocUrl || !googleToken}
+                           onClick={() => {
+                             if (googleDocUrl && googleToken) {
+                               // Extract document ID from URL
+                               const match = googleDocUrl.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+                               if (match) {
+                                 const docId = match[1];
+                                 // For now, just enable the local editor
+                                 // In a full implementation, you'd load the actual document content
+                               }
+                             }
+                           }}
+                         >
+                           Open in Editor
+                         </Button>
+                         {googleToken && (
+                           <Chip 
+                             label="Google Connected" 
+                             color="success" 
+                             icon={<GoogleIcon />}
+                             variant="outlined"
+                           />
+                         )}
+                       </Stack>
+
+                       {/* Embedded Google Docs Editor */}
+                                                {googleDocUrl && googleToken && (
+                           <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+                             <EmbeddedGoogleDocsEditor 
+                               docUrl={googleDocUrl} 
+                               googleToken={googleToken} 
+                               onExit={() => {
+                                 setGoogleDocUrl('');
+                                 setActiveDevelopmentTab('gdocs');
+                               }}
+                             />
+                           </Card>
+                         )}
+
+                       {/* Quick Create New Document */}
+                       {googleToken && (
+                         <Card sx={{ p: 3, mt: 3, bgcolor: '#f0f8ff' }}>
+                           <Typography variant="h6" fontWeight={600} mb={2}>
+                             Quick Actions
+                           </Typography>
+                                                    <Stack direction="row" spacing={2}>
+                           <Button 
+                             variant="outlined" 
+                             startIcon={<AddIcon />}
+                             onClick={() => {
+                               setGoogleDocUrl('https://docs.google.com/document/d/new-document');
+                               alert('New document created! You can now start editing in the local editor.');
+                             }}
+                           >
+                             Create New Document
+                           </Button>
+                           <Button 
+                             variant="outlined" 
+                             startIcon={<FolderIcon />}
+                             onClick={() => {
+                               window.open('https://drive.google.com', '_blank');
+                             }}
+                           >
+                             Open Google Drive
+                           </Button>
+                         </Stack>
+                         </Card>
+                       )}
+                     </Box>
+                   )}
+
+                  {activeDevelopmentTab === 'resources' && (
+                    <Box>
+                      <Typography variant="h5" fontWeight={700} mb={3}>Resource Management</Typography>
+                      <Card sx={{ bgcolor: '#fafafa', p: 2, mb: 3 }}>
+                        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+                          <TextField label="Title" size="small" sx={{ width: 150 }} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} />
+                          <TextField label="URL" size="small" sx={{ width: 200 }} value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} />
+                          <TextField label="Tags" size="small" sx={{ width: 120 }} placeholder="comma-separated" value={form.tags} onChange={e => setForm({ ...form, tags: e.target.value })} />
+                          <TextField label="Platform" size="small" sx={{ width: 100 }} value={form.platform} onChange={e => setForm({ ...form, platform: e.target.value })} />
+                          <TextField label="Notes" size="small" sx={{ width: 150 }} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+                          <Select size="small" value={form.folder} onChange={e => setForm({ ...form, folder: Number(e.target.value) })} sx={{ minWidth: 120 }}>
+                            {folderOptionsFlat(folders, ROOT_ID, 0).map(opt => (
+                              <MenuItem key={opt.key} value={opt.props.value}>{opt.props.children}</MenuItem>
+                            ))}
+                          </Select>
+                          <Button variant="contained" color="primary" onClick={addOrUpdate} startIcon={editing ? <EditIcon /> : <AddIcon />}>
+                            {editing ? "Update" : "Add"} Resource
+                          </Button>
+                          {editing && (
+                            <Button variant="outlined" color="secondary" onClick={() => { setForm({ ...blankForm, folder: activeFolder }); setEditing(null); }}>
+                              Cancel
+                            </Button>
                           )}
-                        </Card>
-                      )}
+                        </Stack>
+                      </Card>
                       
-                      {/* Enhanced Audio Comments */}
-                      <EnhancedAudioRecorder 
-                        resourceId={ref.id} 
-                        currentUser={user} 
-                        workspaceId={selectedWksp.id}
-                      />
-                    </Card>
-                  ))}
-                  {folderResources.length === 0 && (
-                    <Typography color="text.secondary" mt={2}>No resources found in this folder.</Typography>
+                      <Grid container spacing={2}>
+                        {folderResources.map(ref => (
+                          <Grid item xs={12} md={6} lg={4} key={ref.id}>
+                            <Card sx={{ p: 2, height: '100%' }}>
+                              <Stack direction="row" alignItems="center" spacing={1} mb={1}>
+                                <InsertDriveFileIcon color="warning" />
+                                <Typography variant="h6" fontWeight={600} sx={{ flex: 1 }}>{ref.title}</Typography>
+                                <IconButton size="small" onClick={() => editResource(ref)}><EditIcon /></IconButton>
+                                <IconButton size="small" color="error" onClick={() => removeResource(ref.id)}><DeleteIcon /></IconButton>
+                              </Stack>
+                              <Typography variant="body2" color="primary.main" mb={1}>
+                                <a href={ref.url.match(/^https?:\/\//) ? ref.url : `https://${ref.url}`} target="_blank" rel="noopener noreferrer">
+                                  {ref.url}
+                                </a>
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary" mb={1}>
+                                Platform: {ref.platform}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary" mb={1}>
+                                Tags: {Array.isArray(ref.tags) ? ref.tags.join(", ") : ref.tags}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {ref.notes}
+                              </Typography>
+                              
+                              {isGoogleDocResource(ref) && (
+                                <Box sx={{ mt: 2, p: 1, bgcolor: '#f7fafd', borderRadius: 1 }}>
+                                  <Typography variant="caption" fontWeight={600} color="primary">
+                                    Google Doc Available
+                                  </Typography>
+                                </Box>
+                              )}
+                              
+                              <EnhancedAudioRecorder 
+                                resourceId={ref.id} 
+                                currentUser={user} 
+                                workspaceId={selectedWksp.id}
+                              />
+                            </Card>
+                          </Grid>
+                        ))}
+                      </Grid>
+                    </Box>
+                  )}
+
+                  {activeDevelopmentTab === 'search' && (
+                    <Box>
+                      <Typography variant="h5" fontWeight={700} mb={3}>Search Resources</Typography>
+                      {/* Search Scope Selector */}
+                      <Stack direction="row" spacing={2} alignItems="center" mb={2}>
+                        <Typography variant="body2">Scope:</Typography>
+                        <Button
+                          variant={searchTabScope === 'everywhere' ? 'contained' : 'outlined'}
+                          onClick={() => setSearchTabScope('everywhere')}
+                          size="small"
+                        >
+                          All Resources
+                        </Button>
+                        <Button
+                          variant={searchTabScope === 'folder' ? 'contained' : 'outlined'}
+                          onClick={() => setSearchTabScope('folder')}
+                          size="small"
+                        >
+                          This Folder & Subfolders
+                        </Button>
+                      </Stack>
+                      {/* Search Input */}
+                      <Card sx={{ p: 3, mb: 3 }}>
+                        <Typography variant="h6" fontWeight={600} mb={2}>
+                          <SearchIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                          Search All Resources
+                        </Typography>
+                        <TextField
+                          fullWidth
+                          size="large"
+                          placeholder="Search by title, platform, tags, or notes..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          InputProps={{
+                            startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+                            endAdornment: searchQuery && (
+                              <IconButton onClick={() => setSearchQuery('')} size="small">
+                                <CloseIcon />
+                              </IconButton>
+                            )
+                          }}
+                          sx={{ mb: 3 }}
+                        />
+                        {/* Search Results */}
+                        {searchQuery && (
+                          <Box>
+                            <Typography variant="h6" fontWeight={600} mb={2}>
+                              Search Results ({searchResults.length})
+                            </Typography>
+                            {searchResults.length > 0 ? (
+                              <Grid container spacing={2}>
+                                {searchResults.map(result => (
+                                  <Grid item xs={12} md={6} lg={4} key={result.id}>
+                                    <Card sx={{ p: 2, height: '100%', cursor: 'pointer' }} onClick={() => onSearchResultClick(result)}>
+                                      <Stack direction="row" alignItems="center" spacing={1} mb={1}>
+                                        {isGoogleDocResource(result) ? (
+                                          <GoogleIcon color="primary" />
+                                        ) : isGitHubResource(result) ? (
+                                          <GitHubIcon color="secondary" />
+                                        ) : (
+                                          <InsertDriveFileIcon color="warning" />
+                                        )}
+                                        <Typography variant="h6" fontWeight={600} sx={{ flex: 1 }}>{result.title}</Typography>
+                                      </Stack>
+                                      <Typography variant="body2" color="primary.main" mb={1}>
+                                        {result.url && (result.url.match(/^https?:\/\//)
+                                          ? <a href={result.url} target="_blank" rel="noopener noreferrer">{result.url}</a>
+                                          : <span>{result.url}</span>
+                                        )}
+                                      </Typography>
+                                      <Typography variant="body2" color="text.secondary" mb={1}>
+                                        Platform: {result.platform}
+                                      </Typography>
+                                      <Typography variant="body2" color="text.secondary" mb={1}>
+                                        Tags: {Array.isArray(result.tags) ? result.tags.join(", ") : result.tags}
+                                      </Typography>
+                                      <Typography variant="body2" color="text.secondary">
+                                        {result.notes}
+                                      </Typography>
+                                      {isGoogleDocResource(result) && (
+                                        <Box sx={{ mt: 2, p: 1, bgcolor: '#f7fafd', borderRadius: 1 }}>
+                                          <Typography variant="caption" fontWeight={600} color="primary">
+                                            Google Doc Available
+                                          </Typography>
+                                        </Box>
+                                      )}
+                                      {isGitHubResource(result) && (
+                                        <Box sx={{ mt: 2, p: 1, bgcolor: '#f6f8fa', borderRadius: 1 }}>
+                                          <Typography variant="caption" fontWeight={600} color="secondary">
+                                            GitHub File Available
+                                          </Typography>
+                                        </Box>
+                                      )}
+                                    </Card>
+                                  </Grid>
+                                ))}
+                              </Grid>
+                            ) : (
+                              <Typography color="text.secondary">No results found.</Typography>
+                            )}
+                          </Box>
+                        )}
+                      </Card>
+                    </Box>
+                  )}
+
+                  {activeDevelopmentTab === 'import' && (
+                    <Box>
+                      <Typography variant="h5" fontWeight={700} mb={3}>Import Tools</Typography>
+                      <Card sx={{ p: 3, mb: 3 }}>
+                        <Typography variant="h6" fontWeight={600} mb={2}>Import GitHub Repository</Typography>
+                        <ImportGithubIntoApp addFoldersAndResources={addFoldersAndResources} folderOptions={folderOptionsFlat(folders, ROOT_ID, 0)} />
+                      </Card>
+                      
+                      <Card sx={{ p: 3 }}>
+                        <Typography variant="h6" fontWeight={600} mb={2}>Google Meet & Calendar</Typography>
+                        <GoogleMeetAndCalendar />
+                      </Card>
+                    </Box>
                   )}
                 </Box>
-              )}
+              </Box>
             </Box>
-          </Box>
+          )}
         </DndProvider>
       )}
       {mainTab === 1 && <GitHubWorkspacePanel />}
