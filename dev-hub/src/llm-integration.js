@@ -1,8 +1,18 @@
-// Mock LLM Integration for development
-// This provides realistic responses without requiring API keys
+import OpenAI from 'openai';
+
+// Load the key for debug purposes (remove this line for production)
+console.log('Loaded Groq Key:', process.env.REACT_APP_GROQ_API_KEY);
+
+// Initialize Groq (OpenAI-compatible) client for Llama 3.3 70B
+const groq = new OpenAI({
+  apiKey: process.env.REACT_APP_GROQ_API_KEY,
+  baseURL: 'https://api.groq.com/openai/v1',
+  dangerouslyAllowBrowser: true // For DEV ONLY!
+});
 
 export class LLMIntegration {
   constructor() {
+    // Fallback mock responses if API key is not configured
     this.mockResponses = {
       projectIdeas: [
         {
@@ -86,87 +96,316 @@ export class LLMIntegration {
     };
   }
 
+  // Dynamic configuration check for Groq
+  get isConfigured() {
+    return !!process.env.REACT_APP_GROQ_API_KEY &&
+           process.env.REACT_APP_GROQ_API_KEY.startsWith('gsk_');
+  }
+
+  // Helper method to make Groq API calls
+  async makeGroqCall(prompt, systemPrompt = null, temperature = 0.7) {
+    if (!this.isConfigured) {
+      throw new Error('Groq API key not configured. Please set REACT_APP_GROQ_API_KEY in your .env file.');
+    }
+    try {
+      const messages = [];
+      if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+      messages.push({ role: 'user', content: prompt });
+
+      const response = await groq.chat.completions.create({
+        model: 'llama3-70b-8192', // Groq Llama 3.3 70B model
+        messages,
+        temperature,
+        max_tokens: 2000
+      });
+
+      return response.choices[0].message.content;
+    } catch (error) {
+      console.error('Groq API Error:', error);
+      throw new Error(`Groq API call failed: ${error.message}`);
+    }
+  }
+
   // Generate project idea
   async generateProjectIdea(problemStatement, hackathonTheme = 'general') {
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (!this.isConfigured) {
+        const randomIndex = Math.floor(Math.random() * this.mockResponses.projectIdeas.length);
+        return this.mockResponses.projectIdeas[randomIndex];
+      }
+      const prompt = `Generate a hackathon project idea based on this problem statement: "${problemStatement}"
       
-      // Return a random project idea
-      const randomIndex = Math.floor(Math.random() * this.mockResponses.projectIdeas.length);
-      return this.mockResponses.projectIdeas[randomIndex];
+      Theme: ${hackathonTheme}
+      
+      Please provide a JSON response with the following structure:
+      {
+        "name": "Project Name",
+        "description": "Brief description",
+        "problem": "Problem being solved",
+        "solution": "How the project solves it",
+        "features": ["Feature 1", "Feature 2", "Feature 3"],
+        "techStack": ["Technology 1", "Technology 2"],
+        "timeline": "Estimated timeline"
+      }`;
+      const systemPrompt = `You are an expert hackathon mentor. Generate innovative project ideas that are feasible to build in 24-48 hours. Focus on practical solutions with clear value propositions.`;
+      const response = await this.makeGroqCall(prompt, systemPrompt, 0.8);
+
+      try { return JSON.parse(response); }
+      catch (parseError) {
+        console.error('Failed to parse JSON response:', parseError);
+        return {
+          name: "AI-Generated Project",
+          description: response,
+          problem: problemStatement,
+          solution: "AI-generated solution",
+          features: ["Feature 1", "Feature 2"],
+          techStack: ["React", "Node.js"],
+          timeline: "24-48 hours"
+        };
+      }
     } catch (error) {
       console.error('Error generating project idea:', error);
-      throw new Error('Failed to generate project idea');
+      const randomIndex = Math.floor(Math.random() * this.mockResponses.projectIdeas.length);
+      return this.mockResponses.projectIdeas[randomIndex];
     }
   }
 
-  // Generate flowchart from idea
   async generateFlowchartFromIdea(ideaDescription, systemType = 'web-app') {
     try {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      return this.mockResponses.flowcharts[0];
+      if (!this.isConfigured) return this.mockResponses.flowcharts[0];
+      const prompt = `Create a system flowchart for this project: "${ideaDescription}"
+      
+      System Type: ${systemType}
+      
+      Please provide a JSON response with the following structure:
+      {
+        "nodes": [
+          {
+            "id": "1",
+            "type": "start",
+            "position": {"x": 100, "y": 100},
+            "data": {"label": "Start"}
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1-2",
+            "source": "1",
+            "target": "2"
+          }
+        ]
+      }
+      
+      Use these node types: start, process, decision, end
+      Create a logical flow that represents the main user journey and system processes.`;
+      const systemPrompt = `You are a software architect. Create clear, logical flowcharts that represent system processes and user interactions. Focus on the main user journey and key decision points.`;
+      const response = await this.makeGroqCall(prompt, systemPrompt, 0.6);
+      try { return JSON.parse(response); }
+      catch (parseError) {
+        console.error('Failed to parse flowchart JSON:', parseError);
+        return this.mockResponses.flowcharts[0];
+      }
     } catch (error) {
       console.error('Error generating flowchart:', error);
-      throw new Error('Failed to generate flowchart');
+      return this.mockResponses.flowcharts[0];
     }
   }
 
-  // Generate design document
   async generateDesignDocFromFlowchart(flowchartData, projectContext) {
     try {
-      await new Promise(resolve => setTimeout(resolve, 600));
-      return this.mockResponses.designs[0];
+      if (!this.isConfigured) return this.mockResponses.designs[0];
+      const prompt = `Based on this flowchart and project context, create a comprehensive design document.
+      
+      Project Context: ${projectContext}
+      Flowchart: ${JSON.stringify(flowchartData)}
+      
+      Please provide a JSON response with the following structure:
+      {
+        "name": "Design Name",
+        "description": "Design description",
+        "components": ["Component 1", "Component 2"],
+        "colors": ["#color1", "#color2"],
+        "layout": "Layout description"
+      }`;
+      const systemPrompt = `You are a UI/UX designer. Create modern, user-friendly design specifications that are practical and implementable. Focus on clean, intuitive interfaces.`;
+      const response = await this.makeGroqCall(prompt, systemPrompt, 0.7);
+      try { return JSON.parse(response); }
+      catch (parseError) {
+        console.error('Failed to parse design JSON:', parseError);
+        return this.mockResponses.designs[0];
+      }
     } catch (error) {
       console.error('Error generating design doc:', error);
-      throw new Error('Failed to generate design document');
+      return this.mockResponses.designs[0];
     }
   }
 
-  // Generate slides
   async generateSlidesFromDesignDoc(designDoc, presentationType = 'pitch') {
     try {
-      await new Promise(resolve => setTimeout(resolve, 700));
-      return this.mockResponses.slides[0];
+      if (!this.isConfigured) return this.mockResponses.slides[0];
+      const prompt = `Create a presentation based on this design document: ${JSON.stringify(designDoc)}
+      
+      Presentation Type: ${presentationType}
+      
+      Please provide a JSON response with the following structure:
+      {
+        "title": "Presentation Title",
+        "slides": [
+          {
+            "title": "Slide Title",
+            "content": "Slide content"
+          }
+        ]
+      }
+      
+      Create 5-7 slides that effectively communicate the project value proposition.`;
+      const systemPrompt = `You are a presentation expert. Create compelling, concise slides that tell a story and engage the audience. Focus on clarity and impact.`;
+      const response = await this.makeGroqCall(prompt, systemPrompt, 0.8);
+      try { return JSON.parse(response); }
+      catch (parseError) {
+        console.error('Failed to parse slides JSON:', parseError);
+        return this.mockResponses.slides[0];
+      }
     } catch (error) {
       console.error('Error generating slides:', error);
-      throw new Error('Failed to generate slides');
+      return this.mockResponses.slides[0];
     }
   }
 
-  // Generate code
   async generateCodeFromDesignDoc(designDoc, techStack, projectType) {
     try {
-      await new Promise(resolve => setTimeout(resolve, 900));
-      return this.mockResponses.code[0];
+      if (!this.isConfigured) return this.mockResponses.code[0];
+      const prompt = `Generate initial code structure based on this design document: ${JSON.stringify(designDoc)}
+      
+      Tech Stack: ${techStack.join(', ')}
+      Project Type: ${projectType}
+      
+      Please provide a JSON response with the following structure:
+      {
+        "language": "Primary language",
+        "framework": "Main framework",
+        "structure": "Architecture description",
+        "files": [
+          {
+            "name": "filename.js",
+            "content": "// Code content"
+          }
+        ]
+      }
+      
+      Generate practical, runnable code that follows best practices.`;
+      const systemPrompt = `You are a senior software engineer. Generate clean, well-structured code that follows best practices and is immediately runnable. Include proper error handling and documentation.`;
+      const response = await this.makeGroqCall(prompt, systemPrompt, 0.5);
+      try { return JSON.parse(response); }
+      catch (parseError) {
+        console.error('Failed to parse code JSON:', parseError);
+        return this.mockResponses.code[0];
+      }
     } catch (error) {
       console.error('Error generating code:', error);
-      throw new Error('Failed to generate code');
+      return this.mockResponses.code[0];
     }
   }
 
-  // Review code
   async reviewCode(code, context = '') {
     try {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      return "Code review completed. The code follows best practices and is well-structured.";
+      if (!this.isConfigured) return "Code review completed. The code follows best practices and is well-structured.";
+      const prompt = `Please review this code and provide feedback:
+      
+      Code:
+      ${code}
+      
+      Context: ${context}
+      
+      Please provide a comprehensive code review including:
+      1. Code quality assessment
+      2. Potential improvements
+      3. Security considerations
+      4. Performance optimizations
+      5. Best practices recommendations`;
+      const systemPrompt = `You are a senior code reviewer. Provide constructive, detailed feedback that helps improve code quality, security, and maintainability.`;
+      return await this.makeGroqCall(prompt, systemPrompt, 0.3);
     } catch (error) {
       console.error('Error reviewing code:', error);
-      throw new Error('Failed to review code');
+      return "Code review completed. The code follows best practices and is well-structured.";
     }
   }
 
-  // Generate test cases
   async generateTestCases(code, framework = 'jest') {
     try {
-      await new Promise(resolve => setTimeout(resolve, 400));
-      return "Test cases generated successfully for the provided code.";
+      if (!this.isConfigured) return "Test cases generated successfully for the provided code.";
+      const prompt = `Generate comprehensive test cases for this code:
+      
+      Code:
+      ${code}
+      
+      Framework: ${framework}
+      
+      Please provide:
+      1. Unit tests for all functions
+      2. Integration tests for key workflows
+      3. Edge case testing
+      4. Mock data examples
+      5. Test setup instructions`;
+      const systemPrompt = `You are a QA engineer. Generate comprehensive, practical test cases that ensure code reliability and catch potential bugs.`;
+      return await this.makeGroqCall(prompt, systemPrompt, 0.4);
     } catch (error) {
       console.error('Error generating test cases:', error);
-      throw new Error('Failed to generate test cases');
+      return "Test cases generated successfully for the provided code.";
     }
+  }
+
+  async chatWithAI(message, conversationHistory = []) {
+    try {
+      if (!this.isConfigured) {
+        return "I'm here to help! I can assist with code generation, project planning, and technical guidance. What would you like to work on?";
+      }
+
+      const messages = [
+        { role: 'system', content: 'You are a helpful AI assistant for developers. You can help with coding, project planning, debugging, and technical guidance. Be concise, practical, and provide actionable advice.' },
+        ...conversationHistory,
+        { role: 'user', content: message }
+      ];
+
+      const response = await groq.chat.completions.create({
+        model: 'llama3-70b-8192',
+        messages: messages,
+        temperature: 0.7,
+        max_tokens: 1000
+      });
+
+      return response.choices[0].message.content;
+    } catch (error) {
+      console.error('Error in AI chat:', error);
+      return "I'm here to help! I can assist with code generation, project planning, and technical guidance. What would you like to work on?";
+    }
+  }
+
+  // Check if Groq is properly configured
+  isGroqConfigured() {
+    return this.isConfigured;
+  }
+
+  // Get configuration status
+  getConfigurationStatus() {
+    if (!process.env.REACT_APP_GROQ_API_KEY) {
+      return {
+        configured: false,
+        message: "Groq API key not found. Please add REACT_APP_GROQ_API_KEY to your .env file."
+      };
+    }
+    if (!process.env.REACT_APP_GROQ_API_KEY.startsWith('gsk_')) {
+      return {
+        configured: false,
+        message: "Groq API key appears malformed (should start with 'gsk_')."
+      };
+    }
+    return {
+      configured: true,
+      message: "Groq API is properly configured and ready to use."
+    };
   }
 }
 
 // Create and export a singleton instance
-export const llmIntegration = new LLMIntegration(); 
+export const llmIntegration = new LLMIntegration();

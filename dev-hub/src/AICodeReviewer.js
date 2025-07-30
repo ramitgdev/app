@@ -16,8 +16,9 @@ import WarningIcon from '@mui/icons-material/Warning';
 import ErrorIcon from '@mui/icons-material/Error';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import { llmIntegration } from './llm-integration';
 
-// Mock AI analysis - in production, this would call OpenAI/Claude API
+// Mock AI analysis - fallback when OpenAI is not configured
 const mockAIAnalysis = {
   overall_score: 8.5,
   issues: [
@@ -264,15 +265,97 @@ export default function AICodeReviewer({ workspaceId, currentUser }) {
   const [reviewType, setReviewType] = useState('full');
   const [customPrompt, setCustomPrompt] = useState('');
   const [showCustomDialog, setShowCustomDialog] = useState(false);
+  const [configurationStatus, setConfigurationStatus] = useState(null);
+
+  // Check OpenAI configuration on component mount
+  useEffect(() => {
+    const status = llmIntegration.getConfigurationStatus();
+    setConfigurationStatus(status);
+  }, []);
 
   const startAnalysis = async () => {
     setLoading(true);
     
-    // Simulate AI analysis delay
-    setTimeout(() => {
-      setAnalysis(mockAIAnalysis);
+    try {
+      // Sample code for analysis (in a real app, this would be the actual code from the workspace)
+      const sampleCode = `
+function UserProfile({ user }) {
+  const [data, setData] = useState(null);
+  
+  useEffect(() => {
+    fetch('/api/user/' + user.id)
+      .then(r => r.json())
+      .then(setData);
+  }, [user.id]);
+  
+  return (
+    <div>
+      <h1>{user.name}</h1>
+      <div dangerouslySetInnerHTML={{ __html: data?.bio }} />
+    </div>
+  );
+}
+      `;
+
+      if (llmIntegration.isOpenAIConfigured()) {
+        // Use real OpenAI analysis
+        const prompt = `Please analyze this code and provide a comprehensive code review. Focus on ${reviewType === 'security' ? 'security vulnerabilities' : reviewType === 'performance' ? 'performance issues' : reviewType === 'bugs' ? 'potential bugs' : 'all aspects'}.
+
+Code to analyze:
+${sampleCode}
+
+Please provide a JSON response with the following structure:
+{
+  "overall_score": 8.5,
+  "issues": [
+    {
+      "type": "security|performance|bug",
+      "severity": "high|medium|low",
+      "title": "Issue title",
+      "description": "Detailed description",
+      "line": 42,
+      "file": "filename.js",
+      "suggestion": "How to fix this",
+      "code_snippet": "Problematic code",
+      "fixed_code": "Fixed code"
+    }
+  ],
+  "suggestions": ["General improvement suggestions"],
+  "metrics": {
+    "complexity": 6.2,
+    "maintainability": 8.1,
+    "test_coverage": 65,
+    "performance_score": 7.8
+  }
+}`;
+
+        const systemPrompt = `You are a senior software engineer and code reviewer. Analyze code for security vulnerabilities, performance issues, bugs, and best practices. Provide specific, actionable feedback with code examples.`;
+
+        const response = await llmIntegration.makeOpenAICall(prompt, systemPrompt, 0.3);
+        
+        try {
+          const parsedAnalysis = JSON.parse(response);
+          setAnalysis(parsedAnalysis);
+        } catch (parseError) {
+          console.error('Failed to parse AI analysis:', parseError);
+          // Fallback to mock analysis
+          setAnalysis(mockAIAnalysis);
+        }
+      } else {
+        // Use mock analysis if OpenAI is not configured
+        setTimeout(() => {
+          setAnalysis(mockAIAnalysis);
+        }, 2000);
+      }
+    } catch (error) {
+      console.error('Error during analysis:', error);
+      // Fallback to mock analysis
+      setTimeout(() => {
+        setAnalysis(mockAIAnalysis);
+      }, 2000);
+    } finally {
       setLoading(false);
-    }, 3000);
+    }
   };
 
   const handleApplyFix = (issue) => {
@@ -291,14 +374,36 @@ export default function AICodeReviewer({ workspaceId, currentUser }) {
     setShowCustomDialog(false);
     setLoading(true);
     
-    // Simulate custom AI analysis
-    setTimeout(() => {
+    try {
+      if (llmIntegration.isOpenAIConfigured()) {
+        // Use real OpenAI for custom review
+        const response = await llmIntegration.chatWithAI(
+          `Please perform a custom code review based on this request: "${customPrompt}". Provide detailed analysis and suggestions.`,
+          []
+        );
+        
+        setAnalysis({
+          ...mockAIAnalysis,
+          custom_analysis: response
+        });
+      } else {
+        // Use mock response
+        setTimeout(() => {
+          setAnalysis({
+            ...mockAIAnalysis,
+            custom_analysis: `Based on your request: "${customPrompt}", here are the findings...`
+          });
+        }, 2000);
+      }
+    } catch (error) {
+      console.error('Error in custom review:', error);
       setAnalysis({
         ...mockAIAnalysis,
-        custom_analysis: `Based on your request: "${customPrompt}", here are the findings...`
+        custom_analysis: `Error performing custom review: ${error.message}`
       });
+    } finally {
       setLoading(false);
-    }, 2000);
+    }
   };
 
   return (
@@ -307,6 +412,12 @@ export default function AICodeReviewer({ workspaceId, currentUser }) {
         <SmartToyIcon sx={{ mr: 1 }} />
         AI Code Review Assistant
       </Typography>
+
+      {configurationStatus && !configurationStatus.configured && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {configurationStatus.message}
+        </Alert>
+      )}
 
       {/* Analysis Controls */}
       <Box sx={{ mb: 3, p: 2, bgcolor: '#fff', borderRadius: 2, border: '1px solid #ddd' }}>

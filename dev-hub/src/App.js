@@ -6,10 +6,12 @@ import { createClient } from '@supabase/supabase-js';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { useGoogleLogin } from '@react-oauth/google';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 // --- NEW: Material-UI imports ---
 import {
   AppBar, Toolbar, Typography, Button, IconButton, Box, Paper, Drawer, List, ListItem, ListItemIcon, ListItemText, Divider, TextField, InputAdornment, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Chip, Tooltip, Avatar, Stack, Snackbar, Alert, Radio, RadioGroup, FormControlLabel, FormControl, FormLabel, CssBaseline, Container, Grid, Card, CardContent, CardActions, Tabs, Tab, ListItemAvatar, CircularProgress
 } from '@mui/material';
+
 import FolderIcon from '@mui/icons-material/Folder';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import AddIcon from '@mui/icons-material/Add';
@@ -47,6 +49,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import SlideshowIcon from '@mui/icons-material/Slideshow';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import BrushIcon from '@mui/icons-material/Brush';
+import CodeIcon from '@mui/icons-material/Code';
 import EnhancedAudioRecorder from './EnhancedAudioRecorder';
 import AICodeReviewer from './AICodeReviewer';
 import { initiateGitHubLogin, handleGitHubCallback } from './github-oauth';
@@ -55,6 +58,88 @@ import FlowchartEditor from './FlowchartEditor';
 import CanvaEditor from './CanvaEditor';
 import HackathonAssistant from './HackathonAssistant';
 import { llmIntegration } from './llm-integration';
+import ChatGPTInterface from './ChatGPTInterface';
+import WebIDE from './WebIDE';
+import EnhancedGoogleDocsEditor from './EnhancedGoogleDocsEditor';
+import OpenAITest from './OpenAITest';
+
+// Create Material-UI theme outside component to prevent recreation
+const theme = createTheme({
+  palette: {
+    mode: 'light',
+    primary: {
+      main: '#1976d2',
+      light: '#42a5f5',
+      dark: '#1565c0',
+      contrastText: '#ffffff',
+    },
+    secondary: {
+      main: '#dc004e',
+      light: '#f06292',
+      dark: '#c51162',
+      contrastText: '#ffffff',
+    },
+    background: {
+      default: '#ffffff',
+      paper: '#ffffff',
+    },
+    text: {
+      primary: '#000000',
+      secondary: '#666666',
+    },
+    grey: {
+      50: '#fafafa',
+      100: '#f5f5f5',
+      200: '#eeeeee',
+      300: '#e0e0e0',
+      400: '#bdbdbd',
+      500: '#9e9e9e',
+      600: '#757575',
+      700: '#616161',
+      800: '#424242',
+      900: '#212121',
+    },
+    error: {
+      main: '#f44336',
+      light: '#e57373',
+      dark: '#d32f2f',
+      contrastText: '#ffffff',
+    },
+    warning: {
+      main: '#ff9800',
+      light: '#ffb74d',
+      dark: '#f57c00',
+      contrastText: '#000000',
+    },
+    info: {
+      main: '#2196f3',
+      light: '#64b5f6',
+      dark: '#1976d2',
+      contrastText: '#ffffff',
+    },
+    success: {
+      main: '#4caf50',
+      light: '#81c784',
+      dark: '#388e3c',
+      contrastText: '#ffffff',
+    },
+  },
+  typography: {
+    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+  },
+  shape: {
+    borderRadius: 4,
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none',
+        },
+      },
+    },
+  },
+});
 
 // Embedded Google Docs Editor Component
 function EmbeddedGoogleDocsEditor({ docUrl, googleToken, onExit }) {
@@ -2297,64 +2382,72 @@ useEffect(() => {
   // -------- MAIN RENDER --------
   if (!user) {
     return (
-      <Container maxWidth="sm" sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Card className="mui-card" sx={{ p: 4, width: '100%', boxShadow: 3 }}>
-          <Typography variant="h4" fontWeight={700} mb={2} align="center" color="primary">Sign In</Typography>
-          <Auth supabaseClient={supabase} appearance={{ theme: ThemeSupa }} />
-        </Card>
-      </Container>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Container maxWidth="sm" sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Card className="mui-card" sx={{ p: 4, width: '100%', boxShadow: 3 }}>
+            <Typography variant="h4" fontWeight={700} mb={2} align="center" color="primary">Sign In</Typography>
+            <Auth supabaseClient={supabase} appearance={{ theme: ThemeSupa }} />
+          </Card>
+        </Container>
+      </ThemeProvider>
     )
   }
 
   if (!selectedWksp) {
     return (
-      <Container maxWidth="md" sx={{ py: 6 }}>
-        <Card className="mui-card" sx={{ mb: 4, p: 3 }}>
-          <Typography variant="h3" fontWeight={800} mb={2} color="primary.main">My Workspaces</Typography>
-          <WorkspaceCreator currentUser={user} onCreated={() => {
-            setSelectedWksp(null);
-            fetchWorkspaces();
-          }} />
-        </Card>
-        <Card className="mui-card" sx={{ mb: 4, p: 3 }}>
-          <Typography variant="h5" fontWeight={700} mb={2} color="primary">Workspaces you can access:</Typography>
-          <List>
-            {workspaces.map(wksp => (
-              <ListItem key={wksp.id} sx={{ mb: 1, borderRadius: 2, boxShadow: 1, bgcolor: '#f8fafc' }}
-                secondaryAction={
-                  <Stack direction="row" spacing={1}>
-                    <Tooltip title="Open"><IconButton color="primary" onClick={() => setSelectedWksp(wksp)}><FolderIcon /></IconButton></Tooltip>
-                    <Tooltip title="Share"><IconButton color="info" onClick={() => setShowShare(wksp.id)}><ShareIcon /></IconButton></Tooltip>
-                    <Tooltip title="Delete"><IconButton color="error" onClick={async () => { await deleteWorkspace(wksp.id); setSelectedWksp(null); fetchWorkspaces(); }}><DeleteIcon /></IconButton></Tooltip>
-                  </Stack>
-                }>
-                <ListItemIcon><GroupIcon color="primary" /></ListItemIcon>
-                <ListItemText primary={<Typography fontWeight={700}>{wksp.name}</Typography>} />
-              </ListItem>
-            ))}
-            {workspaces.length === 0 && (
-              <ListItem>
-                <ListItemText primary={<Typography color="text.secondary" fontStyle="italic">No workspaces yet. Create or ask someone to invite you.</Typography>} />
-              </ListItem>
-            )}
-          </List>
-          {showShare && <WorkspaceShare workspaceId={showShare} currentUser={user} onShared={() => setShowShare(null)} onInviteSuccess={async () => {
-  if (selectedWksp) {
-    const updated = await fetchCollaboratorsWithPresence(selectedWksp.id);
-    setCollaborators(updated);
-  }
-}} />}
-        </Card>
-        <Box sx={{ mt: 4, textAlign: 'center' }}>
-          <Button variant="outlined" color="secondary" startIcon={<LogoutIcon />} onClick={async () => { await supabase.auth.signOut(); }}>Sign out</Button>
-        </Box>
-      </Container>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Container maxWidth="md" sx={{ py: 6 }}>
+          <Card className="mui-card" sx={{ mb: 4, p: 3 }}>
+            <Typography variant="h3" fontWeight={800} mb={2} color="primary.main">My Workspaces</Typography>
+            <WorkspaceCreator currentUser={user} onCreated={() => {
+              setSelectedWksp(null);
+              fetchWorkspaces();
+            }} />
+          </Card>
+          <Card className="mui-card" sx={{ mb: 4, p: 3 }}>
+            <Typography variant="h5" fontWeight={700} mb={2} color="primary">Workspaces you can access:</Typography>
+            <List>
+              {workspaces.map(wksp => (
+                <ListItem key={wksp.id} sx={{ mb: 1, borderRadius: 2, boxShadow: 1, bgcolor: '#f8fafc' }}
+                  secondaryAction={
+                    <Stack direction="row" spacing={1}>
+                      <Tooltip title="Open"><IconButton color="primary" onClick={() => setSelectedWksp(wksp)}><FolderIcon /></IconButton></Tooltip>
+                      <Tooltip title="Share"><IconButton color="info" onClick={() => setShowShare(wksp.id)}><ShareIcon /></IconButton></Tooltip>
+                      <Tooltip title="Delete"><IconButton color="error" onClick={async () => { await deleteWorkspace(wksp.id); setSelectedWksp(null); fetchWorkspaces(); }}><DeleteIcon /></IconButton></Tooltip>
+                    </Stack>
+                  }>
+                  <ListItemIcon><GroupIcon color="primary" /></ListItemIcon>
+                  <ListItemText primary={<Typography fontWeight={700}>{wksp.name}</Typography>} />
+                </ListItem>
+              ))}
+              {workspaces.length === 0 && (
+                <ListItem>
+                  <ListItemText primary={<Typography color="text.secondary" fontStyle="italic">No workspaces yet. Create or ask someone to invite you.</Typography>} />
+                </ListItem>
+              )}
+            </List>
+            {showShare && <WorkspaceShare workspaceId={showShare} currentUser={user} onShared={() => setShowShare(null)} onInviteSuccess={async () => {
+    if (selectedWksp) {
+      const updated = await fetchCollaboratorsWithPresence(selectedWksp.id);
+      setCollaborators(updated);
+    }
+  }} />}
+          </Card>
+          <Box sx={{ mt: 4, textAlign: 'center' }}>
+            <Button variant="outlined" color="secondary" startIcon={<LogoutIcon />} onClick={async () => { await supabase.auth.signOut(); }}>Sign out</Button>
+          </Box>
+        </Container>
+      </ThemeProvider>
     )
   }
 
   return (
-    <>
-      <AppBar position="static" color="default" elevation={0} sx={{ borderBottom: '1px solid #e0e0e0' }}>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <>
+        <AppBar position="static" color="default" elevation={0} sx={{ borderBottom: '1px solid #e0e0e0' }}>
         <Toolbar>
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
             DevHub Workspace
@@ -2363,6 +2456,7 @@ useEffect(() => {
             <Tab label="Workspaces" />
             <Tab icon={<GitHubIcon />} label="GitHub Editor" />
             <Tab icon={<CloudUploadIcon />} label="Marketplace" />
+            <Tab icon={<SmartToyIcon />} label="OpenAI Test" />
           </Tabs>
         </Toolbar>
       </AppBar>
@@ -2576,6 +2670,8 @@ useEffect(() => {
                   <Tabs value={activeDevelopmentTab} onChange={(_, v) => setActiveDevelopmentTab(v)}>
                     <Tab label="GitHub Editor" value="github" />
                     <Tab label="Google Docs" value="gdocs" />
+                    <Tab label="AI Assistant" value="ai-assistant" />
+                    <Tab label="Web IDE" value="web-ide" />
                     <Tab label="Hackathon AI" value="hackathon" />
                     <Tab label="Resources" value="resources" />
                     <Tab label="Search" value="search" />
@@ -2773,19 +2869,19 @@ useEffect(() => {
                          )}
                        </Stack>
 
-                       {/* Embedded Google Docs Editor */}
-                                                {googleDocUrl && googleToken && (
-                           <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
-                             <EmbeddedGoogleDocsEditor 
-                               docUrl={googleDocUrl} 
-                               googleToken={googleToken} 
-                               onExit={() => {
-                                 setGoogleDocUrl('');
-                                 setActiveDevelopmentTab('gdocs');
-                               }}
-                             />
-                           </Card>
-                         )}
+                       {/* Enhanced Google Docs Editor with AI */}
+                       {googleDocUrl && googleToken && (
+                         <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden', height: '70vh' }}>
+                           <EnhancedGoogleDocsEditor 
+                             docUrl={googleDocUrl} 
+                             googleToken={googleToken} 
+                             onExit={() => {
+                               setGoogleDocUrl('');
+                               setActiveDevelopmentTab('gdocs');
+                             }}
+                           />
+                         </Card>
+                       )}
 
                        {/* Quick Create New Document */}
                        {googleToken && (
@@ -2818,6 +2914,59 @@ useEffect(() => {
                        )}
                      </Box>
                    )}
+
+                  {activeDevelopmentTab === 'ai-assistant' && (
+                    <Box>
+                      <Typography variant="h5" fontWeight={700} mb={3}>AI Assistant</Typography>
+                      <Card sx={{ p: 3, mb: 3, bgcolor: '#f0f8ff' }}>
+                        <Typography variant="h6" fontWeight={600} mb={2}>
+                          <SmartToyIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                          ChatGPT-Style AI Assistant
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" mb={3}>
+                          Interact with an AI assistant that can help you edit Google Docs, generate code, and provide intelligent responses.
+                        </Typography>
+                      </Card>
+                      
+                      <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden', height: '70vh' }}>
+                        <ChatGPTInterface 
+                          onEditGoogleDoc={(content) => {
+                            console.log('AI wants to edit Google Doc:', content);
+                            // This would integrate with the Google Docs editor
+                          }}
+                          onGenerateCode={(prompt) => {
+                            console.log('AI wants to generate code:', prompt);
+                            // This would integrate with the Web IDE
+                          }}
+                          onExecuteCode={(code) => {
+                            console.log('AI wants to execute code:', code);
+                            // This would execute in the Web IDE
+                          }}
+                          googleToken={googleToken}
+                          currentDocId={googleDocUrl ? googleDocUrl.match(/\/document\/d\/([a-zA-Z0-9-_]+)/)?.[1] : null}
+                        />
+                      </Card>
+                    </Box>
+                  )}
+
+                  {activeDevelopmentTab === 'web-ide' && (
+                    <Box>
+                      <Typography variant="h5" fontWeight={700} mb={3}>Web IDE</Typography>
+                      <Card sx={{ p: 3, mb: 3, bgcolor: '#f0f8ff' }}>
+                        <Typography variant="h6" fontWeight={600} mb={2}>
+                          <CodeIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                          AI-Powered Code Editor
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" mb={3}>
+                          Write, debug, and optimize code with AI assistance. Features syntax highlighting, code execution, and ChatGPT integration.
+                        </Typography>
+                      </Card>
+                      
+                      <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden', height: '70vh' }}>
+                        <WebIDE />
+                      </Card>
+                    </Box>
+                  )}
 
                   {activeDevelopmentTab === 'hackathon' && (
                     <Box>
@@ -3116,6 +3265,7 @@ useEffect(() => {
       )}
       {mainTab === 1 && <GitHubWorkspacePanel />}
       {mainTab === 2 && <MarketplacePanel currentUser={user} />}
+      {mainTab === 3 && <OpenAITest />}
 
       {/* Editor Rendering */}
       {currentEditor === 'flowchart' && (
@@ -3239,6 +3389,7 @@ useEffect(() => {
           googleToken={googleToken}
         />
       )}
-    </>
+      </>
+    </ThemeProvider>
   );
 }
