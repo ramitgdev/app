@@ -8,7 +8,7 @@ import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { useGoogleLogin } from '@react-oauth/google';
 // --- NEW: Material-UI imports ---
 import {
-  AppBar, Toolbar, Typography, Button, IconButton, Box, Paper, Drawer, List, ListItem, ListItemIcon, ListItemText, Divider, TextField, InputAdornment, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Chip, Tooltip, Avatar, Stack, Snackbar, Alert, Radio, RadioGroup, FormControlLabel, FormControl, FormLabel, CssBaseline, Container, Grid, Card, CardContent, CardActions, Tabs, Tab, ListItemAvatar
+  AppBar, Toolbar, Typography, Button, IconButton, Box, Paper, Drawer, List, ListItem, ListItemIcon, ListItemText, Divider, TextField, InputAdornment, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Chip, Tooltip, Avatar, Stack, Snackbar, Alert, Radio, RadioGroup, FormControlLabel, FormControl, FormLabel, CssBaseline, Container, Grid, Card, CardContent, CardActions, Tabs, Tab, ListItemAvatar, CircularProgress
 } from '@mui/material';
 import FolderIcon from '@mui/icons-material/Folder';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
@@ -44,9 +44,17 @@ import WaveformIcon from '@mui/icons-material/GraphicEq';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SaveIcon from '@mui/icons-material/Save';
+import SlideshowIcon from '@mui/icons-material/Slideshow';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import BrushIcon from '@mui/icons-material/Brush';
 import EnhancedAudioRecorder from './EnhancedAudioRecorder';
 import AICodeReviewer from './AICodeReviewer';
 import { initiateGitHubLogin, handleGitHubCallback } from './github-oauth';
+import GoogleSlidesEditor from './GoogleSlidesEditor';
+import FlowchartEditor from './FlowchartEditor';
+import CanvaEditor from './CanvaEditor';
+import HackathonAssistant from './HackathonAssistant';
+import { llmIntegration } from './llm-integration';
 
 // Embedded Google Docs Editor Component
 function EmbeddedGoogleDocsEditor({ docUrl, googleToken, onExit }) {
@@ -785,6 +793,25 @@ function isGitHubResource(ref) {
   return typeof ref.url === "string" && ref.url.includes("github.com") && ref.url.includes("/blob/");
 }
 
+function isGoogleSlidesResource(ref) {
+  return typeof ref.url === "string" && ref.url.startsWith("https://docs.google.com/presentation/d/");
+}
+
+function isFlowchartResource(ref) {
+  return typeof ref.url === "string" && ref.url.startsWith("flowchart://") || 
+         (ref.type && ref.type === 'flowchart');
+}
+
+function isCanvaResource(ref) {
+  return typeof ref.url === "string" && ref.url.startsWith("canva://") || 
+         (ref.type && ref.type === 'canva');
+}
+
+function isLucidchartResource(ref) {
+  return typeof ref.url === "string" && ref.url.startsWith("lucidchart://") || 
+         (ref.type && ref.type === 'lucidchart');
+}
+
 function extractGitHubInfo(url) {
   // Extract owner/repo and file path from GitHub URL
   // Example: https://github.com/owner/repo/blob/main/src/file.js
@@ -1439,6 +1466,296 @@ function GoogleMeetAndCalendar() {
   );
 }
 
+
+
+// Sidebar Application Interface Component
+function SidebarAppInterface({ appType, onClose, googleToken }) {
+  const [chatMessages, setChatMessages] = useState([]);
+  const [inputMessage, setInputMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim()) return;
+
+    const userMessage = { role: 'user', content: inputMessage, timestamp: new Date() };
+    setChatMessages(prev => [...prev, userMessage]);
+    setInputMessage('');
+    setIsLoading(true);
+
+    try {
+      // Simulate AI response
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Generate contextual AI response based on app type and user input
+      const aiResponse = generateAIResponse(inputMessage, appType);
+      
+      setChatMessages(prev => [...prev, {
+        role: 'assistant',
+        content: aiResponse,
+        timestamp: new Date()
+      }]);
+    } catch (error) {
+      console.error('Error getting AI response:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const generateAIResponse = (userInput, appType) => {
+    const input = userInput.toLowerCase();
+    
+    // Flowchart-specific responses
+    if (appType === 'flowchart') {
+      if (input.includes('flowchart') || input.includes('diagram')) {
+        return `Great! For creating a flowchart, I recommend starting with:
+        
+1. **Define the process** - What are the main steps?
+2. **Use standard symbols** - Rectangles for processes, diamonds for decisions
+3. **Keep it simple** - Start with 5-7 steps maximum
+4. **Use Lucidchart's templates** - They have great starter templates
+
+Would you like me to help you structure a specific flowchart?`;
+      }
+      if (input.includes('system') || input.includes('architecture')) {
+        return `For system architecture diagrams, consider:
+        
+- **User Interface Layer** (Frontend)
+- **Business Logic Layer** (Backend)
+- **Data Layer** (Database)
+- **External Integrations** (APIs)
+
+I can help you design the flow between these components!`;
+      }
+    }
+    
+    // Slides-specific responses
+    if (appType === 'slides') {
+      if (input.includes('presentation') || input.includes('slide')) {
+        return `For creating compelling presentations:
+        
+1. **Start with a story** - Problem → Solution → Impact
+2. **Use the 10-20-30 rule** - 10 slides, 20 minutes, 30pt font
+3. **Visual hierarchy** - One main point per slide
+4. **Include data** - Charts and metrics build credibility
+
+What type of presentation are you working on?`;
+      }
+      if (input.includes('pitch') || input.includes('pitch deck')) {
+        return `For pitch decks, structure your slides like this:
+        
+1. **Problem** (1 slide) - What pain point are you solving?
+2. **Solution** (1-2 slides) - How does your product solve it?
+3. **Market** (1 slide) - Size and opportunity
+4. **Business Model** (1 slide) - How do you make money?
+5. **Team** (1 slide) - Why are you the right people?
+6. **Ask** (1 slide) - What do you need from investors?
+
+Need help with any specific slide?`;
+      }
+    }
+    
+    // Canva-specific responses
+    if (appType === 'canva') {
+      if (input.includes('design') || input.includes('layout')) {
+        return `For effective design in Canva:
+        
+1. **Choose a template** - Start with something close to your vision
+2. **Use consistent colors** - Pick 2-3 colors and stick to them
+3. **Typography hierarchy** - One main font, one accent font
+4. **White space** - Don't overcrowd your design
+5. **Grid system** - Align elements for professional look
+
+What type of design are you creating?`;
+      }
+      if (input.includes('color') || input.includes('palette')) {
+        return `Color psychology tips:
+        
+- **Blue** - Trust, professionalism, stability
+- **Green** - Growth, nature, money
+- **Red** - Energy, urgency, passion
+- **Yellow** - Optimism, creativity, warmth
+- **Purple** - Luxury, creativity, mystery
+
+For your project, consider what emotion you want to convey!`;
+      }
+    }
+    
+    // General responses
+    if (input.includes('help') || input.includes('how')) {
+      return `I'm here to help you with your ${appType} project! I can assist with:
+      
+- Planning and structure
+- Best practices and tips
+- Content suggestions
+- Design recommendations
+- Technical guidance
+
+What specific aspect would you like help with?`;
+    }
+    
+    if (input.includes('model') || input.includes('ai')) {
+      return `I'm an AI assistant designed to help you with your ${appType} projects. While I'm not ChatGPT, I'm trained to provide helpful, contextual advice for:
+      
+- Project planning and structure
+- Best practices and workflows
+- Content creation and design
+- Technical guidance and tips
+
+How can I help you with your current project?`;
+    }
+    
+    // Default response
+    return `I understand you're working on ${appType}. That's a great choice! I can help you with:
+    
+- Planning your project structure
+- Best practices and tips
+- Content and design suggestions
+- Technical guidance
+
+What specific aspect of your ${appType} project would you like to discuss?`;
+  };
+
+
+
+  return (
+    <Box sx={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 9999,
+      backgroundColor: 'white',
+      display: 'flex'
+    }}>
+      {/* Main Application Area */}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        {/* Header */}
+        <Box sx={{
+          p: 2,
+          borderBottom: '1px solid #e0e0e0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <Typography variant="h6" fontWeight={600}>
+            {appType === 'flowchart' ? 'Flowchart Editor' : 
+             appType === 'slides' ? 'Google Slides Editor' : 
+             appType === 'canva' ? 'Design Editor' : 'Application'}
+          </Typography>
+          <IconButton onClick={onClose}>
+            <CloseIcon />
+          </IconButton>
+        </Box>
+        
+        {/* Application Frame */}
+        <Box sx={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                    {/* Editors are now opened in new tabs for creation */}
+        </Box>
+      </Box>
+
+      {/* ChatGPT-like Sidebar */}
+      <Box sx={{
+        width: 400,
+        borderLeft: '1px solid #e0e0e0',
+        display: 'flex',
+        flexDirection: 'column',
+        backgroundColor: '#f8f9fa'
+      }}>
+        {/* Chat Header */}
+        <Box sx={{
+          p: 2,
+          borderBottom: '1px solid #e0e0e0',
+          backgroundColor: 'white'
+        }}>
+          <Typography variant="h6" fontWeight={600}>
+            AI Assistant
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Ask me anything about your {appType} project
+          </Typography>
+        </Box>
+
+        {/* Chat Messages */}
+        <Box sx={{
+          flex: 1,
+          overflowY: 'auto',
+          p: 2,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2
+        }}>
+          {chatMessages.map((message, index) => (
+            <Box
+              key={index}
+              sx={{
+                display: 'flex',
+                justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
+                mb: 1
+              }}
+            >
+              <Box sx={{
+                maxWidth: '80%',
+                p: 2,
+                borderRadius: 2,
+                backgroundColor: message.role === 'user' ? '#1976d2' : 'white',
+                color: message.role === 'user' ? 'white' : 'text.primary',
+                boxShadow: 1
+              }}>
+                <Typography variant="body2">
+                  {message.content}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                  {message.timestamp.toLocaleTimeString()}
+                </Typography>
+              </Box>
+            </Box>
+          ))}
+          
+          {isLoading && (
+            <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
+              <Box sx={{
+                p: 2,
+                borderRadius: 2,
+                backgroundColor: 'white',
+                boxShadow: 1
+              }}>
+                <CircularProgress size={20} />
+              </Box>
+            </Box>
+          )}
+        </Box>
+
+        {/* Input Area */}
+        <Box sx={{
+          p: 2,
+          borderTop: '1px solid #e0e0e0',
+          backgroundColor: 'white'
+        }}>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Ask me about your project..."
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+              disabled={isLoading}
+            />
+            <IconButton
+              onClick={handleSendMessage}
+              disabled={!inputMessage.trim() || isLoading}
+              color="primary"
+            >
+              <SendIcon />
+            </IconButton>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
 // ---- Main App ----
 export default function App() {
   const user = useSupabaseAuthUser();
@@ -1485,6 +1802,19 @@ export default function App() {
 
   // In the App component, add a state for search scope in the search tab:
   const [searchTabScope, setSearchTabScope] = useState('everywhere'); // 'everywhere' or 'folder'
+
+  // Hackathon assistant state
+  const [showHackathonAssistant, setShowHackathonAssistant] = useState(false);
+  const [currentEditor, setCurrentEditor] = useState(null);
+  const [editorData, setEditorData] = useState(null);
+  
+  // Sidebar interface state
+  const [sidebarApp, setSidebarApp] = useState(null);
+
+  // Debug currentEditor changes
+  useEffect(() => {
+    console.log('Current editor changed to:', currentEditor);
+  }, [currentEditor]);
 
   // --- Refresh workspaces from Supabase ---
   
@@ -2246,6 +2576,7 @@ useEffect(() => {
                   <Tabs value={activeDevelopmentTab} onChange={(_, v) => setActiveDevelopmentTab(v)}>
                     <Tab label="GitHub Editor" value="github" />
                     <Tab label="Google Docs" value="gdocs" />
+                    <Tab label="Hackathon AI" value="hackathon" />
                     <Tab label="Resources" value="resources" />
                     <Tab label="Search" value="search" />
                     <Tab label="Import" value="import" />
@@ -2488,6 +2819,104 @@ useEffect(() => {
                      </Box>
                    )}
 
+                  {activeDevelopmentTab === 'hackathon' && (
+                    <Box>
+                      <Typography variant="h5" fontWeight={700} mb={3}>Hackathon AI Assistant</Typography>
+                      <Card sx={{ p: 3, mb: 3, bgcolor: '#f0f8ff' }}>
+                        <Typography variant="h6" fontWeight={600} mb={2}>
+                          <SmartToyIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                          AI-Powered Hackathon Workspace
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" mb={3}>
+                          From idea to implementation - let AI help you build your hackathon project step by step.
+                        </Typography>
+                        <Button 
+                          variant="contained" 
+                          startIcon={<SmartToyIcon />}
+                          onClick={() => {
+                            console.log('Launch Hackathon Assistant clicked');
+                            setShowHackathonAssistant(true);
+                          }}
+                          sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}
+                        >
+                          Launch Hackathon Assistant
+                        </Button>
+                      </Card>
+
+                      {/* Quick Access to Individual Tools */}
+                      <Grid container spacing={3}>
+                        <Grid item xs={12} md={6} lg={4}>
+                          <Card sx={{ p: 3, height: '100%' }}>
+                            <Stack direction="row" alignItems="center" spacing={1} mb={2}>
+                              <AccountTreeIcon color="primary" />
+                              <Typography variant="h6" fontWeight={600}>Flowchart Creator</Typography>
+                            </Stack>
+                            <Typography variant="body2" color="text.secondary" mb={2}>
+                              Create system flowcharts and diagrams for your project architecture.
+                            </Typography>
+                            <Button 
+                              variant="outlined" 
+                              startIcon={<AddIcon />}
+                              onClick={() => {
+                                console.log('Flowchart button clicked');
+                                window.open('https://www.lucidchart.com/documents#/create', '_blank');
+                              }}
+                              fullWidth
+                            >
+                              Create Flowchart
+                            </Button>
+                          </Card>
+                        </Grid>
+
+                        <Grid item xs={12} md={6} lg={4}>
+                          <Card sx={{ p: 3, height: '100%' }}>
+                            <Stack direction="row" alignItems="center" spacing={1} mb={2}>
+                              <SlideshowIcon color="primary" />
+                              <Typography variant="h6" fontWeight={600}>Presentation Builder</Typography>
+                            </Stack>
+                            <Typography variant="body2" color="text.secondary" mb={2}>
+                              Generate compelling presentation slides for your project pitch.
+                            </Typography>
+                            <Button 
+                              variant="outlined" 
+                              startIcon={<AddIcon />}
+                              onClick={() => {
+                                console.log('Slides button clicked');
+                                window.open('https://docs.google.com/presentation/create', '_blank');
+                              }}
+                              fullWidth
+                            >
+                              Create Slides
+                            </Button>
+                          </Card>
+                        </Grid>
+
+                        <Grid item xs={12} md={6} lg={4}>
+                          <Card sx={{ p: 3, height: '100%' }}>
+                            <Stack direction="row" alignItems="center" spacing={1} mb={2}>
+                              <BrushIcon color="primary" />
+                              <Typography variant="h6" fontWeight={600}>Design Creator</Typography>
+                            </Stack>
+                            <Typography variant="body2" color="text.secondary" mb={2}>
+                              Create visual designs and mockups for your application.
+                            </Typography>
+                            <Button 
+                              variant="outlined" 
+                              startIcon={<AddIcon />}
+                              onClick={() => {
+                                console.log('Canva button clicked');
+                                window.open('https://www.canva.com/create', '_blank');
+                              }}
+                              fullWidth
+                            >
+                              Create Design
+                            </Button>
+                          </Card>
+                        </Grid>
+                      </Grid>
+                    </Box>
+                  )}
+
                   {activeDevelopmentTab === 'resources' && (
                     <Box>
                       <Typography variant="h5" fontWeight={700} mb={3}>Resource Management</Typography>
@@ -2687,6 +3116,129 @@ useEffect(() => {
       )}
       {mainTab === 1 && <GitHubWorkspacePanel />}
       {mainTab === 2 && <MarketplacePanel currentUser={user} />}
+
+      {/* Editor Rendering */}
+      {currentEditor === 'flowchart' && (
+        <Box sx={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 9999,
+          backgroundColor: 'white'
+        }}>
+          <FlowchartEditor
+            flowchartData={editorData}
+            onSave={(data) => {
+              console.log('Flowchart saved:', data);
+              setCurrentEditor(null);
+              setEditorData(null);
+            }}
+            onExit={() => {
+              setCurrentEditor(null);
+              setEditorData(null);
+            }}
+          />
+        </Box>
+      )}
+
+      {currentEditor === 'slides' && (
+        <Box sx={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 9999,
+          backgroundColor: 'white'
+        }}>
+          <GoogleSlidesEditor
+            presentationUrl=""
+            googleToken={googleToken}
+            onExit={() => {
+              setCurrentEditor(null);
+              setEditorData(null);
+            }}
+          />
+        </Box>
+      )}
+
+      {currentEditor === 'canva' && (
+        <Box sx={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 9999,
+          backgroundColor: 'white'
+        }}>
+          <CanvaEditor
+            designData={editorData}
+            onSave={(data) => {
+              console.log('Design saved:', data);
+              setCurrentEditor(null);
+              setEditorData(null);
+            }}
+            onExit={() => {
+              setCurrentEditor(null);
+              setEditorData(null);
+            }}
+          />
+        </Box>
+      )}
+
+      {/* Hackathon Assistant Dialog */}
+      {showHackathonAssistant && (
+        <Box sx={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 9999,
+          backgroundColor: 'white'
+        }}>
+          <HackathonAssistant
+            onGenerateProject={(project) => {
+              console.log('Generated project:', project);
+              setShowHackathonAssistant(false);
+            }}
+            onGenerateFlowchart={(flowchart) => {
+              console.log('Opening Flowchart Editor');
+              setEditorData(flowchart);
+              setCurrentEditor('flowchart');
+              setShowHackathonAssistant(false);
+            }}
+            onGenerateDesign={(design) => {
+              console.log('Opening Canva Editor');
+              setEditorData(design);
+              setCurrentEditor('canva');
+              setShowHackathonAssistant(false);
+            }}
+            onGenerateSlides={(slides) => {
+              console.log('Opening Slides Editor');
+              setEditorData(slides);
+              setCurrentEditor('slides');
+              setShowHackathonAssistant(false);
+            }}
+            onGenerateCode={(code) => {
+              console.log('Generated code:', code);
+              setShowHackathonAssistant(false);
+            }}
+          />
+        </Box>
+      )}
+
+      {/* Sidebar Application Interface */}
+      {sidebarApp && (
+        <SidebarAppInterface
+          appType={sidebarApp}
+          onClose={() => setSidebarApp(null)}
+          googleToken={googleToken}
+        />
+      )}
     </>
   );
 }

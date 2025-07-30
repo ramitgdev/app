@@ -24,7 +24,19 @@
     "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "openai": "^4.28.0",
+    "axios": "^1.6.0",
+    "react-markdown": "^9.0.1",
+    "react-syntax-highlighter": "^15.5.0",
+    "lucide-react": "^0.294.0",
+    "reactflow": "^11.10.1",
+    "@reactflow/controls": "^11.2.6",
+    "@reactflow/background": "^11.3.3",
+    "react-beautiful-dnd": "^13.1.1",
+    "framer-motion": "^10.16.16",
+    "react-hook-form": "^7.48.2",
+    "react-hot-toast": "^2.4.1"
   },
   "scripts": {
     "start": "react-scripts start",
