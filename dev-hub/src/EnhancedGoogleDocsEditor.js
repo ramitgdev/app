@@ -360,7 +360,15 @@ This document outlines a collaborative editing platform with AI assistance capab
                     setEditSuggestion(message.editSuggestion);
                     setShowEditDialog(true);
                   }}
-                  sx={{ mt: 1 }}
+                  sx={{ 
+                    mt: 1,
+                    color: 'primary.main',
+                    borderColor: 'primary.main',
+                    '&:hover': {
+                      borderColor: 'primary.dark',
+                      backgroundColor: 'primary.light',
+                    }
+                  }}
                 >
                   Apply Edit
                 </Button>
@@ -424,7 +432,13 @@ This document outlines a collaborative editing platform with AI assistance capab
                 variant="contained"
                 startIcon={<SmartToyIcon />}
                 onClick={() => setShowAI(!showAI)}
-                color={showAI ? 'primary' : 'default'}
+                sx={{
+                  bgcolor: showAI ? 'primary.main' : 'grey.300',
+                  color: showAI ? 'primary.contrastText' : 'text.primary',
+                  '&:hover': {
+                    bgcolor: showAI ? 'primary.dark' : 'grey.400',
+                  }
+                }}
               >
                 AI Assistant
               </Button>
@@ -501,8 +515,13 @@ This document outlines a collaborative editing platform with AI assistance capab
               <IconButton
                 onClick={handleAISend}
                 disabled={!aiInput.trim() || isAiLoading}
-                color="primary"
-                sx={{ alignSelf: 'flex-end' }}
+                sx={{ 
+                  alignSelf: 'flex-end',
+                  color: 'primary.main',
+                  '&:hover': {
+                    bgcolor: 'primary.light',
+                  }
+                }}
               >
                 <SendIcon />
               </IconButton>
@@ -533,7 +552,12 @@ This document outlines a collaborative editing platform with AI assistance capab
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowEditDialog(false)}>Cancel</Button>
+          <Button 
+            onClick={() => setShowEditDialog(false)}
+            sx={{ color: 'text.secondary' }}
+          >
+            Cancel
+          </Button>
           <Button 
             onClick={() => {
               setDocContent(editSuggestion);
@@ -543,6 +567,13 @@ This document outlines a collaborative editing platform with AI assistance capab
               setTimeout(() => setShowAlert(false), 3000);
             }} 
             variant="contained"
+            sx={{ 
+              bgcolor: 'primary.main',
+              color: 'primary.contrastText',
+              '&:hover': {
+                bgcolor: 'primary.dark',
+              }
+            }}
           >
             Apply Changes
           </Button>

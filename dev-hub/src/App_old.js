@@ -60,7 +60,7 @@ import HackathonAssistant from './HackathonAssistant';
 import { llmIntegration } from './llm-integration';
 import ChatGPTInterface from './ChatGPTInterface';
 import WebIDE from './WebIDE';
-
+import EnhancedGoogleDocsEditor from './EnhancedGoogleDocsEditor';
 import OpenAITest from './OpenAITest';
 
 // Create Material-UI theme outside component to prevent recreation
@@ -101,7 +101,7 @@ const theme = createTheme({
     },
     error: {
       main: '#f44336',
-      light: '#ffebee',
+      light: '#e57373',
       dark: '#d32f2f',
       contrastText: '#ffffff',
     },
@@ -136,22 +136,9 @@ const theme = createTheme({
         root: {
           textTransform: 'none',
         },
-        outlined: {
-          borderWidth: '1px',
-          '&:hover': {
-            borderWidth: '1px',
-          },
-        },
       },
       defaultProps: {
         disableElevation: true,
-      },
-    },
-    MuiIconButton: {
-      styleOverrides: {
-        root: {
-          padding: '8px',
-        },
       },
     },
     MuiCssBaseline: {
@@ -2357,7 +2344,7 @@ useEffect(() => {
           {node.id !== 0 && (
             <>
               <Tooltip title="Rename"><IconButton size="small" color="info" onClick={e => { e.stopPropagation(); renameFolder(node.id); }}><EditIcon fontSize="small" /></IconButton></Tooltip>
-              <Tooltip title="Delete"><IconButton size="small" sx={{ color: 'error.main' }} onClick={e => { e.stopPropagation(); deleteFolder(node.id); }}><DeleteIcon fontSize="small" /></IconButton></Tooltip>
+              <Tooltip title="Delete"><IconButton size="small" color="error" onClick={e => { e.stopPropagation(); deleteFolder(node.id); }}><DeleteIcon fontSize="small" /></IconButton></Tooltip>
             </>
           )}
         </Box>
@@ -2395,7 +2382,7 @@ useEffect(() => {
                 )}
                 <Typography sx={{ flex: 1 }}>{childFile.title}</Typography>
                 <Tooltip title="Edit resource"><IconButton size="small" color="info" onClick={e => { e.stopPropagation(); editResource(childFile); }}><EditIcon fontSize="small" /></IconButton></Tooltip>
-                <Tooltip title="Delete resource"><IconButton size="small" sx={{ color: 'error.main' }} onClick={e => { e.stopPropagation(); removeResource(childFile.id); }}><DeleteIcon fontSize="small" /></IconButton></Tooltip>
+                <Tooltip title="Delete resource"><IconButton size="small" color="error" onClick={e => { e.stopPropagation(); removeResource(childFile.id); }}><DeleteIcon fontSize="small" /></IconButton></Tooltip>
               </Box>
             ))}
             {/* Recursively render child folders */}
@@ -2455,7 +2442,7 @@ useEffect(() => {
                     <Stack direction="row" spacing={1}>
                       <Tooltip title="Open"><IconButton color="primary" onClick={() => setSelectedWksp(wksp)}><FolderIcon /></IconButton></Tooltip>
                       <Tooltip title="Share"><IconButton color="info" onClick={() => setShowShare(wksp.id)}><ShareIcon /></IconButton></Tooltip>
-                      <Tooltip title="Delete"><IconButton sx={{ color: 'error.main' }} onClick={async () => { await deleteWorkspace(wksp.id); setSelectedWksp(null); fetchWorkspaces(); }}><DeleteIcon /></IconButton></Tooltip>
+                      <Tooltip title="Delete"><IconButton color="error" onClick={async () => { await deleteWorkspace(wksp.id); setSelectedWksp(null); fetchWorkspaces(); }}><DeleteIcon /></IconButton></Tooltip>
                     </Stack>
                   }>
                   <ListItemIcon><GroupIcon color="primary" /></ListItemIcon>
@@ -2557,23 +2544,9 @@ useEffect(() => {
                         <Button size="small" variant="outlined" startIcon={<ShareIcon />} onClick={(e) => { e.stopPropagation(); setShowShare(wksp.id); }}>
                           Share
                         </Button>
-                                        <Button 
-                  size="small" 
-                  variant="outlined" 
-                  sx={{ 
-                    color: 'error.main',
-                    borderColor: 'error.main',
-                    '&:hover': {
-                      borderColor: 'error.dark',
-                      backgroundColor: 'error.light',
-                      color: 'error.contrastText',
-                    }
-                  }}
-                  startIcon={<DeleteIcon />} 
-                  onClick={(e) => { e.stopPropagation(); deleteWorkspace(wksp.id); }}
-                >
-                  Delete
-                </Button>
+                        <Button size="small" variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={(e) => { e.stopPropagation(); deleteWorkspace(wksp.id); }}>
+                          Delete
+                        </Button>
                       </Stack>
                     </Card>
                   </Grid>
@@ -2938,18 +2911,18 @@ useEffect(() => {
                          )}
                        </Stack>
 
-                       {/* Google Docs Editor */}
+                       {/* Enhanced Google Docs Editor with AI */}
                        {googleDocUrl && googleToken && (
-                           <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
-                             <EmbeddedGoogleDocsEditor
-                               docUrl={googleDocUrl}
-                               googleToken={googleToken}
-                               onExit={() => {
-                                 setGoogleDocUrl('');
-                                 setActiveDevelopmentTab('gdocs');
-                               }}
-                             />
-                           </Card>
+                         <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden', height: '70vh' }}>
+                           <EnhancedGoogleDocsEditor 
+                             docUrl={googleDocUrl} 
+                             googleToken={googleToken} 
+                             onExit={() => {
+                               setGoogleDocUrl('');
+                               setActiveDevelopmentTab('gdocs');
+                             }}
+                           />
+                         </Card>
                        )}
 
                        {/* Quick Create New Document */}
@@ -3181,7 +3154,7 @@ useEffect(() => {
                                 <InsertDriveFileIcon color="warning" />
                                 <Typography variant="h6" fontWeight={600} sx={{ flex: 1 }}>{ref.title}</Typography>
                                 <IconButton size="small" onClick={() => editResource(ref)}><EditIcon /></IconButton>
-                                <IconButton size="small" sx={{ color: 'error.main' }} onClick={() => removeResource(ref.id)}><DeleteIcon /></IconButton>
+                                <IconButton size="small" color="error" onClick={() => removeResource(ref.id)}><DeleteIcon /></IconButton>
                               </Stack>
                               <Typography variant="body2" color="primary.main" mb={1}>
                                 <a href={ref.url.match(/^https?:\/\//) ? ref.url : `https://${ref.url}`} target="_blank" rel="noopener noreferrer">
