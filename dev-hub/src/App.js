@@ -27,6 +27,10 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import SendIcon from '@mui/icons-material/Send';
 import GoogleIcon from '@mui/icons-material/Google';
 import CloseIcon from '@mui/icons-material/Close';
+import ChatIcon from '@mui/icons-material/Chat';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckIcon from '@mui/icons-material/Check';
+import PersonIcon from '@mui/icons-material/Person';
 import './AppModern.css';
 import MonacoEditor from '@monaco-editor/react';
 import { TreeView, TreeItem } from '@mui/lab';
@@ -51,6 +55,7 @@ import SlideshowIcon from '@mui/icons-material/Slideshow';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import BrushIcon from '@mui/icons-material/Brush';
 import CodeIcon from '@mui/icons-material/Code';
+import ArticleIcon from '@mui/icons-material/Article';
 import Star from '@mui/icons-material/Star';
 import Build from '@mui/icons-material/Build';
 import CloudUpload from '@mui/icons-material/CloudUpload';
@@ -1843,6 +1848,22 @@ export default function App() {
   // Hackathon assistant state
   const [showHackathonAssistant, setShowHackathonAssistant] = useState(false);
   const [currentEditor, setCurrentEditor] = useState(null);
+
+  // Global AI Assistant state
+  const [showGlobalAIChat, setShowGlobalAIChat] = useState(false);
+  const [globalChatMessages, setGlobalChatMessages] = useState([
+    {
+      id: 1,
+      role: 'assistant',
+      content: "Hello! I'm your global AI assistant powered by Groq. I can help you with code, documents, projects, and more across all tabs. What would you like to work on?",
+      timestamp: new Date()
+    }
+  ]);
+  const [globalChatInput, setGlobalChatInput] = useState('');
+  const [isGlobalChatLoading, setIsGlobalChatLoading] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState(null);
+  const [docActionMessage, setDocActionMessage] = useState('');
+  const [showDocActionAlert, setShowDocActionAlert] = useState(false);
   const [editorData, setEditorData] = useState(null);
   
   // Sidebar interface state
@@ -1862,6 +1883,432 @@ export default function App() {
   useEffect(() => {
     console.log('Current editor changed to:', currentEditor);
   }, [currentEditor]);
+
+  // Listen for Google Docs action results
+  useEffect(() => {
+    const handleDocSuccess = (event) => {
+      setDocActionMessage(event.detail.message);
+      setShowDocActionAlert(true);
+      setTimeout(() => setShowDocActionAlert(false), 3000);
+    };
+
+    const handleDocError = (event) => {
+      setDocActionMessage(event.detail.message);
+      setShowDocActionAlert(true);
+      setTimeout(() => setShowDocActionAlert(false), 3000);
+    };
+
+    window.addEventListener('showDocSuccess', handleDocSuccess);
+    window.addEventListener('showDocError', handleDocError);
+    
+    return () => {
+      window.removeEventListener('showDocSuccess', handleDocSuccess);
+      window.removeEventListener('showDocError', handleDocError);
+    };
+  }, []);
+
+  // Global AI Assistant functions
+  const handleGlobalChatSend = async () => {
+    if (!globalChatInput.trim() || isGlobalChatLoading) return;
+
+    const userMessage = {
+      id: Date.now(),
+      role: 'user',
+      content: globalChatInput,
+      timestamp: new Date()
+    };
+
+    setGlobalChatMessages(prev => [...prev, userMessage]);
+    const currentInput = globalChatInput;
+    setGlobalChatInput('');
+    setIsGlobalChatLoading(true);
+
+    try {
+      // Check if Groq is configured
+      if (!llmIntegration.isGroqConfigured()) {
+        const errorMessage = {
+          id: Date.now() + 1,
+          role: 'assistant',
+          content: `🔧 AI Assistant Not Configured
+
+To use the AI assistant, you need to set up a free Groq API key:
+
+1. Go to https://console.groq.com/keys
+2. Sign up and create a new API key
+3. Create a .env file in your project root
+4. Add: REACT_APP_GROQ_API_KEY=your_key_here
+5. Restart your development server
+
+The key should start with 'gsk_'. Once configured, I'll be able to help you with code, debugging, and more!`,
+          timestamp: new Date()
+        };
+        setGlobalChatMessages(prev => [...prev, errorMessage]);
+        setIsGlobalChatLoading(false);
+        return;
+      }
+
+      // Build context based on current tab
+      let context = `Current tab: ${activeDevelopmentTab}. `;
+      
+      // Add tab-specific context
+      if (activeDevelopmentTab === 'web-ide') {
+        // Get current code from WebIDE if available
+        const codeEditor = document.querySelector('.monaco-editor');
+        let currentCode = '';
+        if (codeEditor) {
+          // Try to get code from Monaco editor
+          currentCode = codeEditor.textContent || '';
+        }
+        context += `User is in the Web IDE. Current code in editor:\n\`\`\`\n${currentCode}\n\`\`\`\n\n`;
+      } else if (activeDevelopmentTab === 'github') {
+        context += `User is in the GitHub editor. `;
+      } else if (activeDevelopmentTab === 'gdocs') {
+        context += `User is in Google Docs editor. `;
+      } else if (activeDevelopmentTab === 'hackathon') {
+        context += `User is in the Hackathon AI assistant. `;
+      }
+
+      context += `User message: ${currentInput}`;
+
+      const response = await llmIntegration.chatWithAI(
+        context,
+        globalChatMessages.slice(-5).map(msg => ({
+          role: msg.role === 'user' ? 'user' : 'assistant',
+          content: msg.content
+        }))
+      );
+
+      // Check if response contains code suggestions
+      const codeBlockRegex = /```(?:javascript|js|python|java|cpp|html|css)?\n([\s\S]*?)```/g;
+      const codeMatches = [...response.matchAll(codeBlockRegex)];
+      let codeSuggestion = null;
+      
+      if (codeMatches.length > 0) {
+        codeSuggestion = codeMatches[0][1].trim();
+      }
+
+      // Check if response contains document content (non-code text suggestions)
+      let documentSuggestion = null;
+      const responseText = response.toLowerCase();
+      const inputText = currentInput.toLowerCase();
+      
+      // Detect document content requests and extract the actual content to add
+      if ((inputText.includes('add') && (inputText.includes('google doc') || inputText.includes('document') || inputText.includes('doc'))) &&
+          !codeMatches.length) { // Not code
+        
+        // For simple "add X to doc" requests, extract just the content
+        // Pattern: "add [content] to the google doc"
+        const addMatch = currentInput.match(/add\s+["']?(.*?)["']?\s+to\s+(?:the\s+)?(?:google\s+)?doc/i);
+        if (addMatch && addMatch[1] && addMatch[1].length < 50) { // Only for short additions
+          documentSuggestion = addMatch[1].trim();
+          console.log('Extracted short content to add:', documentSuggestion);
+        } else {
+          // For longer content or unclear extractions, use the full AI response
+          documentSuggestion = response.trim();
+          console.log('Using full AI response for document:', documentSuggestion.substring(0, 100) + '...');
+        }
+      } else if (((inputText.includes('write') || inputText.includes('create') || inputText.includes('draft') || inputText.includes('design') || inputText.includes('generate')) && 
+          (inputText.includes('document') || inputText.includes('doc') || inputText.includes('text') || inputText.includes('content') || inputText.includes('proposal') || inputText.includes('plan'))) &&
+          !codeMatches.length) { // Not code
+        // For content creation requests, use the full AI response
+        documentSuggestion = response.trim();
+        console.log('Document creation detected, using full response:', documentSuggestion.substring(0, 100) + '...');
+      }
+
+      const assistantMessage = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: response,
+        codeSuggestion: codeSuggestion,
+        documentSuggestion: documentSuggestion,
+        timestamp: new Date()
+      };
+
+      // Only switch tabs if explicitly requested or when applying code
+      const shouldSwitchTab = analyzeResponseForTabSwitch(response, currentInput);
+      console.log('Tab switch analysis:', { 
+        userInput: currentInput, 
+        shouldSwitchTab, 
+        currentTab: activeDevelopmentTab,
+        hasDocumentSuggestion: !!documentSuggestion,
+        hasCodeSuggestion: !!codeSuggestion 
+      });
+      
+      if (shouldSwitchTab) {
+        setActiveDevelopmentTab(shouldSwitchTab);
+        assistantMessage.tabSwitched = shouldSwitchTab;
+      }
+
+      setGlobalChatMessages(prev => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error('Error in global AI chat:', error);
+      const errorMessage = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: 'Sorry, I encountered an error. Please try again.',
+        timestamp: new Date()
+      };
+      setGlobalChatMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsGlobalChatLoading(false);
+    }
+  };
+
+  const analyzeResponseForTabSwitch = (response, userInput) => {
+    const responseText = response.toLowerCase();
+    const inputText = userInput.toLowerCase();
+    
+    // Explicit tab switching requests
+    if (inputText.includes('switch to') || inputText.includes('go to') || inputText.includes('open')) {
+      if (inputText.includes('ide') || inputText.includes('code editor')) {
+        return 'web-ide';
+      }
+      if (inputText.includes('document') || inputText.includes('docs') || inputText.includes('google doc')) {
+        return 'gdocs';
+      }
+      if (inputText.includes('github') || inputText.includes('repository')) {
+        return 'github';
+      }
+      if (inputText.includes('hackathon') || inputText.includes('project')) {
+        return 'hackathon';
+      }
+    }
+    
+    // Google Docs operations - detect "add to google doc" requests
+    if ((inputText.includes('add') && (inputText.includes('google doc') || inputText.includes('document') || inputText.includes('doc'))) ||
+        (inputText.includes('write') && inputText.includes('google doc')) ||
+        (inputText.includes('insert') && inputText.includes('doc'))) {
+      return 'gdocs';
+    }
+    
+    // Switch to IDE if providing code suggestions
+    if (responseText.includes('```') && (inputText.includes('write') || inputText.includes('create') || inputText.includes('generate'))) {
+      return 'web-ide';
+    }
+    
+    // Switch to Google Docs if providing document content (any length now)
+    if ((inputText.includes('write') || inputText.includes('create') || inputText.includes('draft') || inputText.includes('design') || inputText.includes('generate')) && 
+        (inputText.includes('document') || inputText.includes('doc') || inputText.includes('text') || inputText.includes('content') || inputText.includes('proposal') || inputText.includes('plan')) &&
+        !responseText.includes('```')) { // Not code
+      return 'gdocs';
+    }
+    
+    return null;
+  };
+
+  const copyToClipboard = async (text, messageId) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedMessageId(messageId);
+      setTimeout(() => setCopiedMessageId(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  const applyCodeToIDE = (code) => {
+    // Switch to web-ide tab if not already there
+    if (activeDevelopmentTab !== 'web-ide') {
+      setActiveDevelopmentTab('web-ide');
+    }
+    
+    // Wait for tab switch then apply code
+    setTimeout(() => {
+      // Try to find Monaco editor instance and set the code
+      const event = new CustomEvent('setIdeCode', { detail: { code } });
+      window.dispatchEvent(event);
+    }, 100);
+  };
+
+  const applyTextToGoogleDoc = async (text) => {
+    console.log('applyTextToGoogleDoc called with:', text);
+    console.log('Current googleToken:', !!googleToken);
+    console.log('Current googleDocUrl:', googleDocUrl);
+    console.log('Current tab:', activeDevelopmentTab);
+    
+    // Switch to gdocs tab if not already there
+    if (activeDevelopmentTab !== 'gdocs') {
+      console.log('Switching to gdocs tab...');
+      setActiveDevelopmentTab('gdocs');
+    }
+    
+    // Wait for tab switch then apply text
+    setTimeout(async () => {
+      try {
+        if (!googleToken) {
+          throw new Error('Google token not available. Please authenticate with Google.');
+        }
+        
+        if (!googleDocUrl) {
+          throw new Error('Google Doc URL not configured. Please set a Google Doc URL first.');
+        }
+        
+        // Extract document ID from URL
+        const match = googleDocUrl.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+        if (!match) {
+          throw new Error('Invalid Google Doc URL format.');
+        }
+        
+        const documentId = match[1];
+        console.log('Attempting to insert text to document:', documentId);
+        console.log('Text to insert:', text);
+        
+        await insertTextGoogleDoc(documentId, text, googleToken);
+        
+        console.log('Text inserted successfully!');
+        // Show success message
+        const event = new CustomEvent('showDocSuccess', { 
+          detail: { message: `Successfully added "${text}" to Google Doc!` } 
+        });
+        window.dispatchEvent(event);
+        
+      } catch (error) {
+        console.error('Error applying text to Google Doc:', error);
+        const event = new CustomEvent('showDocError', { 
+          detail: { message: `Failed to apply text: ${error.message}` } 
+        });
+        window.dispatchEvent(event);
+      }
+    }, 500); // Longer timeout for Google Docs tab switch
+  };
+
+  const renderGlobalChatMessage = (message) => {
+    const isUser = message.role === 'user';
+    const isAssistant = message.role === 'assistant';
+
+    return (
+      <Box
+        key={message.id}
+        sx={{
+          display: 'flex',
+          mb: 2,
+          justifyContent: isUser ? 'flex-end' : 'flex-start'
+        }}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            maxWidth: '80%',
+            flexDirection: isUser ? 'row-reverse' : 'row',
+            alignItems: 'flex-start',
+            gap: 1
+          }}
+        >
+          <Box
+            sx={{
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              bgcolor: isUser ? 'primary.main' : 'secondary.main',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white'
+            }}
+          >
+            {isUser ? <PersonIcon /> : <SmartToyIcon />}
+          </Box>
+          
+          <Paper
+            sx={{
+              p: 2,
+              bgcolor: isUser ? 'primary.main' : 'grey.100',
+              color: isUser ? 'white' : 'text.primary',
+              borderRadius: 2,
+              position: 'relative'
+            }}
+          >
+            <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+              {message.content}
+            </Typography>
+            
+            {message.codeSuggestion && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Code Suggestion:
+                </Typography>
+                <Paper
+                  sx={{
+                    p: 1,
+                    mt: 1,
+                    bgcolor: 'grey.900',
+                    color: 'white',
+                    fontFamily: 'monospace',
+                    fontSize: '12px',
+                    maxHeight: 200,
+                    overflow: 'auto'
+                  }}
+                >
+                  <pre style={{ margin: 0 }}>{message.codeSuggestion}</pre>
+                </Paper>
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={() => applyCodeToIDE(message.codeSuggestion)}
+                  sx={{ mt: 1 }}
+                  startIcon={<CodeIcon />}
+                >
+                  Apply to IDE
+                </Button>
+              </Box>
+            )}
+
+            {message.documentSuggestion && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Document Content:
+                </Typography>
+                <Paper
+                  sx={{
+                    p: 2,
+                    mt: 1,
+                    bgcolor: 'grey.50',
+                    border: '1px solid #e0e0e0',
+                    fontSize: '14px',
+                    maxHeight: 200,
+                    overflow: 'auto'
+                  }}
+                >
+                  <Typography variant="body2" style={{ whiteSpace: 'pre-wrap' }}>
+                    {message.documentSuggestion}
+                  </Typography>
+                </Paper>
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="secondary"
+                  onClick={() => applyTextToGoogleDoc(message.documentSuggestion)}
+                  sx={{ mt: 1 }}
+                  startIcon={<ArticleIcon />}
+                >
+                  Apply to Google Doc
+                </Button>
+              </Box>
+            )}
+            
+            {message.tabSwitched && (
+              <Chip
+                label={`Switched to ${message.tabSwitched} tab`}
+                size="small"
+                color="primary"
+                sx={{ mt: 1 }}
+              />
+            )}
+            
+            {isAssistant && (
+              <IconButton
+                size="small"
+                onClick={() => copyToClipboard(message.content, message.id)}
+                sx={{ position: 'absolute', top: 4, right: 4 }}
+              >
+                {copiedMessageId === message.id ? <CheckIcon /> : <ContentCopyIcon />}
+              </IconButton>
+            )}
+          </Paper>
+        </Box>
+      </Box>
+    );
+  };
 
   // --- Refresh workspaces from Supabase ---
   
@@ -3450,6 +3897,120 @@ useEffect(() => {
           googleToken={googleToken}
         />
       )}
+
+      {/* Global AI Assistant Floating Action Button */}
+      <Fab
+        color="primary"
+        sx={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          zIndex: 1000
+        }}
+        onClick={() => setShowGlobalAIChat(!showGlobalAIChat)}
+      >
+        <ChatIcon />
+      </Fab>
+
+      {/* Global AI Chat Drawer */}
+      <Drawer
+        anchor="right"
+        open={showGlobalAIChat}
+        onClose={() => setShowGlobalAIChat(false)}
+        sx={{
+          '& .MuiDrawer-paper': {
+            width: 400,
+            height: '100%'
+          }
+        }}
+      >
+        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+          {/* Chat Header */}
+          <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+            <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <SmartToyIcon color="primary" />
+              Global AI Assistant
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              I can help you across all tabs and apply changes where needed
+            </Typography>
+            <Chip
+              label={`Current tab: ${activeDevelopmentTab}`}
+              size="small"
+              color="secondary"
+              sx={{ mt: 1 }}
+            />
+          </Box>
+
+          {/* Chat Messages */}
+          <Box
+            sx={{
+              flex: 1,
+              overflowY: 'auto',
+              p: 2,
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            {globalChatMessages.map(renderGlobalChatMessage)}
+            
+            {isGlobalChatLoading && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 2 }}>
+                <Box sx={{ display: 'flex' }}>
+                  <CircularProgress size={20} />
+                </Box>
+                <Typography variant="body2" color="text.secondary">
+                  AI is thinking...
+                </Typography>
+              </Box>
+            )}
+          </Box>
+
+          {/* Chat Input */}
+          <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                fullWidth
+                multiline
+                maxRows={3}
+                value={globalChatInput}
+                onChange={(e) => setGlobalChatInput(e.target.value)}
+                placeholder="Ask me to help with code, docs, projects, or anything..."
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleGlobalChatSend();
+                  }
+                }}
+                disabled={isGlobalChatLoading}
+              />
+              <IconButton
+                onClick={handleGlobalChatSend}
+                disabled={!globalChatInput.trim() || isGlobalChatLoading}
+                color="primary"
+                sx={{ alignSelf: 'flex-end' }}
+              >
+                <SendIcon />
+              </IconButton>
+            </Box>
+          </Box>
+        </Box>
+      </Drawer>
+
+      {/* Google Docs Action Alert */}
+      <Snackbar
+        open={showDocActionAlert}
+        autoHideDuration={3000}
+        onClose={() => setShowDocActionAlert(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+      >
+        <Alert 
+          severity={docActionMessage.includes('successfully') ? 'success' : 'error'}
+          onClose={() => setShowDocActionAlert(false)}
+        >
+          {docActionMessage}
+        </Alert>
+      </Snackbar>
       </>
     </ThemeProvider>
   );

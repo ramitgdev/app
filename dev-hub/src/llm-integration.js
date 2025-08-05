@@ -1,14 +1,28 @@
 import OpenAI from 'openai';
 
+// Set dummy OPENAI_API_KEY if not present to prevent OpenAI library from throwing errors
+// We override the baseURL to use Groq anyway, so this dummy key won't be used
+if (!process.env.OPENAI_API_KEY) {
+  process.env.OPENAI_API_KEY = 'dummy-key-for-groq-compatibility';
+}
+
 // Load the key for debug purposes (remove this line for production)
 console.log('Loaded Groq Key:', process.env.REACT_APP_GROQ_API_KEY);
 
 // Initialize Groq (OpenAI-compatible) client for Llama 3.3 70B
-const groq = new OpenAI({
-  apiKey: process.env.REACT_APP_GROQ_API_KEY,
-  baseURL: 'https://api.groq.com/openai/v1',
-  dangerouslyAllowBrowser: true // For DEV ONLY!
-});
+let groq = null;
+
+// Function to get or create Groq client
+function getGroqClient() {
+  if (!groq && process.env.REACT_APP_GROQ_API_KEY) {
+    groq = new OpenAI({
+      apiKey: process.env.REACT_APP_GROQ_API_KEY,
+      baseURL: 'https://api.groq.com/openai/v1',
+      dangerouslyAllowBrowser: true // For DEV ONLY!
+    });
+  }
+  return groq;
+}
 
 export class LLMIntegration {
   constructor() {
@@ -107,12 +121,18 @@ export class LLMIntegration {
     if (!this.isConfigured) {
       throw new Error('Groq API key not configured. Please set REACT_APP_GROQ_API_KEY in your .env file.');
     }
+    
+    const client = getGroqClient();
+    if (!client) {
+      throw new Error('Failed to initialize Groq client. Check your API key.');
+    }
+    
     try {
       const messages = [];
       if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
       messages.push({ role: 'user', content: prompt });
 
-      const response = await groq.chat.completions.create({
+      const response = await client.chat.completions.create({
         model: 'llama3-70b-8192', // Groq Llama 3.3 70B model
         messages,
         temperature,
@@ -367,7 +387,12 @@ export class LLMIntegration {
         { role: 'user', content: message }
       ];
 
-      const response = await groq.chat.completions.create({
+      const client = getGroqClient();
+      if (!client) {
+        throw new Error('Groq client not available');
+      }
+
+      const response = await client.chat.completions.create({
         model: 'llama3-70b-8192',
         messages: messages,
         temperature: 0.7,

@@ -18,7 +18,7 @@ import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import { llmIntegration } from './llm-integration';
 
-// Mock AI analysis - fallback when OpenAI is not configured
+// Mock AI analysis - fallback when Groq is not configured
 const mockAIAnalysis = {
   overall_score: 8.5,
   issues: [
@@ -267,7 +267,7 @@ export default function AICodeReviewer({ workspaceId, currentUser }) {
   const [showCustomDialog, setShowCustomDialog] = useState(false);
   const [configurationStatus, setConfigurationStatus] = useState(null);
 
-  // Check OpenAI configuration on component mount
+  // Check Groq configuration on component mount
   useEffect(() => {
     const status = llmIntegration.getConfigurationStatus();
     setConfigurationStatus(status);
@@ -297,8 +297,8 @@ function UserProfile({ user }) {
 }
       `;
 
-      if (llmIntegration.isOpenAIConfigured()) {
-        // Use real OpenAI analysis
+      if (llmIntegration.isGroqConfigured()) {
+        // Use real Groq analysis
         const prompt = `Please analyze this code and provide a comprehensive code review. Focus on ${reviewType === 'security' ? 'security vulnerabilities' : reviewType === 'performance' ? 'performance issues' : reviewType === 'bugs' ? 'potential bugs' : 'all aspects'}.
 
 Code to analyze:
@@ -331,7 +331,7 @@ Please provide a JSON response with the following structure:
 
         const systemPrompt = `You are a senior software engineer and code reviewer. Analyze code for security vulnerabilities, performance issues, bugs, and best practices. Provide specific, actionable feedback with code examples.`;
 
-        const response = await llmIntegration.makeOpenAICall(prompt, systemPrompt, 0.3);
+        const response = await llmIntegration.makeGroqCall(prompt, systemPrompt, 0.3);
         
         try {
           const parsedAnalysis = JSON.parse(response);
@@ -342,7 +342,7 @@ Please provide a JSON response with the following structure:
           setAnalysis(mockAIAnalysis);
         }
       } else {
-        // Use mock analysis if OpenAI is not configured
+        // Use mock analysis if Groq is not configured
         setTimeout(() => {
           setAnalysis(mockAIAnalysis);
         }, 2000);
@@ -375,8 +375,8 @@ Please provide a JSON response with the following structure:
     setLoading(true);
     
     try {
-      if (llmIntegration.isOpenAIConfigured()) {
-        // Use real OpenAI for custom review
+      if (llmIntegration.isGroqConfigured()) {
+        // Use real Groq for custom review
         const response = await llmIntegration.chatWithAI(
           `Please perform a custom code review based on this request: "${customPrompt}". Provide detailed analysis and suggestions.`,
           []
