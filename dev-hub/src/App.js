@@ -6,10 +6,11 @@ import { createClient } from '@supabase/supabase-js';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { useGoogleLogin } from '@react-oauth/google';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
+import { modernTheme } from './ModernTheme';
 // --- NEW: Material-UI imports ---
 import {
-  AppBar, Toolbar, Typography, Button, IconButton, Box, Paper, Drawer, List, ListItem, ListItemIcon, ListItemText, Divider, TextField, InputAdornment, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Chip, Tooltip, Avatar, Stack, Snackbar, Alert, Radio, RadioGroup, FormControlLabel, FormControl, FormLabel, CssBaseline, Container, Grid, Card, CardContent, CardActions, Tabs, Tab, ListItemAvatar, CircularProgress
+  AppBar, Toolbar, Typography, Button, IconButton, Box, Paper, Drawer, List, ListItem, ListItemIcon, ListItemText, Divider, TextField, InputAdornment, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Chip, Tooltip, Avatar, Stack, Snackbar, Alert, Radio, RadioGroup, FormControlLabel, FormControl, FormLabel, CssBaseline, Container, Grid, Card, CardContent, CardActions, Tabs, Tab, ListItemAvatar, CircularProgress, SpeedDial, SpeedDialAction, SpeedDialIcon, Fab, Badge, LinearProgress, Accordion, AccordionSummary, AccordionDetails
 } from '@mui/material';
 
 import FolderIcon from '@mui/icons-material/Folder';
@@ -50,6 +51,15 @@ import SlideshowIcon from '@mui/icons-material/Slideshow';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import BrushIcon from '@mui/icons-material/Brush';
 import CodeIcon from '@mui/icons-material/Code';
+import Star from '@mui/icons-material/Star';
+import Build from '@mui/icons-material/Build';
+import CloudUpload from '@mui/icons-material/CloudUpload';
+import SettingsIcon from '@mui/icons-material/Settings';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import WorkIcon from '@mui/icons-material/Work';
+import SchoolIcon from '@mui/icons-material/School';
+import BusinessIcon from '@mui/icons-material/Business';
+import HomeIcon from '@mui/icons-material/Home';
 import EnhancedAudioRecorder from './EnhancedAudioRecorder';
 import AICodeReviewer from './AICodeReviewer';
 import { initiateGitHubLogin, handleGitHubCallback } from './github-oauth';
@@ -62,108 +72,10 @@ import ChatGPTInterface from './ChatGPTInterface';
 import WebIDE from './WebIDE';
 
 import OpenAITest from './OpenAITest';
+import AdvancedAIOrchestrator from './AdvancedAIOrchestrator';
 
-// Create Material-UI theme outside component to prevent recreation
-const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: {
-      main: '#1976d2',
-      light: '#42a5f5',
-      dark: '#1565c0',
-      contrastText: '#ffffff',
-    },
-    secondary: {
-      main: '#dc004e',
-      light: '#f06292',
-      dark: '#c51162',
-      contrastText: '#ffffff',
-    },
-    background: {
-      default: '#ffffff',
-      paper: '#ffffff',
-    },
-    text: {
-      primary: '#000000',
-      secondary: '#666666',
-    },
-    grey: {
-      50: '#fafafa',
-      100: '#f5f5f5',
-      200: '#eeeeee',
-      300: '#e0e0e0',
-      400: '#bdbdbd',
-      500: '#9e9e9e',
-      600: '#757575',
-      700: '#616161',
-      800: '#424242',
-      900: '#212121',
-    },
-    error: {
-      main: '#f44336',
-      light: '#ffebee',
-      dark: '#d32f2f',
-      contrastText: '#ffffff',
-    },
-    warning: {
-      main: '#ff9800',
-      light: '#ffb74d',
-      dark: '#f57c00',
-      contrastText: '#000000',
-    },
-    info: {
-      main: '#2196f3',
-      light: '#64b5f6',
-      dark: '#1976d2',
-      contrastText: '#ffffff',
-    },
-    success: {
-      main: '#4caf50',
-      light: '#81c784',
-      dark: '#388e3c',
-      contrastText: '#ffffff',
-    },
-  },
-  typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
-  },
-  shape: {
-    borderRadius: 4,
-  },
-  components: {
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          textTransform: 'none',
-        },
-        outlined: {
-          borderWidth: '1px',
-          '&:hover': {
-            borderWidth: '1px',
-          },
-        },
-      },
-      defaultProps: {
-        disableElevation: true,
-      },
-    },
-    MuiIconButton: {
-      styleOverrides: {
-        root: {
-          padding: '8px',
-        },
-      },
-    },
-    MuiCssBaseline: {
-      styleOverrides: {
-        body: {
-          margin: 0,
-          padding: 0,
-        },
-      },
-    },
-  },
-});
+// Use the modern theme
+const theme = modernTheme;
 
 // Embedded Google Docs Editor Component
 function EmbeddedGoogleDocsEditor({ docUrl, googleToken, onExit }) {
@@ -1936,6 +1848,16 @@ export default function App() {
   // Sidebar interface state
   const [sidebarApp, setSidebarApp] = useState(null);
 
+  // New AI features state
+  const [showAdvancedAI, setShowAdvancedAI] = useState(false);
+  const [aiOrchestratorData, setAiOrchestratorData] = useState(null);
+  const [crossPlatformCode, setCrossPlatformCode] = useState({});
+  const [aiProcessingStatus, setAiProcessingStatus] = useState({
+    isProcessing: false,
+    progress: 0,
+    currentStep: ''
+  });
+
   // Debug currentEditor changes
   useEffect(() => {
     console.log('Current editor changed to:', currentEditor);
@@ -2740,6 +2662,7 @@ useEffect(() => {
                     <Tab label="GitHub Editor" value="github" />
                     <Tab label="Google Docs" value="gdocs" />
                     <Tab label="AI Assistant" value="ai-assistant" />
+                    <Tab label="Advanced AI" value="advanced-ai" />
                     <Tab label="Web IDE" value="web-ide" />
                     <Tab label="Hackathon AI" value="hackathon" />
                     <Tab label="Resources" value="resources" />
@@ -3013,6 +2936,63 @@ useEffect(() => {
                           }}
                           googleToken={googleToken}
                           currentDocId={googleDocUrl ? googleDocUrl.match(/\/document\/d\/([a-zA-Z0-9-_]+)/)?.[1] : null}
+                        />
+                      </Card>
+                    </Box>
+                  )}
+
+                  {activeDevelopmentTab === 'advanced-ai' && (
+                    <Box>
+                      <Typography variant="h5" fontWeight={700} mb={3}>
+                                                 <Star sx={{ mr: 1, verticalAlign: 'middle' }} />
+                        Advanced AI Orchestrator
+                      </Typography>
+                      
+                      <Card sx={{ p: 3, mb: 3, bgcolor: '#f0f8ff' }}>
+                        <Typography variant="h6" fontWeight={600} mb={2}>
+                                                     <Build sx={{ mr: 1, verticalAlign: 'middle' }} />
+                          Cross-Platform AI Development
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" mb={3}>
+                          Generate production-ready code from Google Docs specifications. Create web, mobile, desktop, and API applications with AI assistance.
+                        </Typography>
+                        
+                        <Grid container spacing={2}>
+                          <Grid item xs={12} md={6}>
+                            <Card sx={{ p: 2, bgcolor: '#fff' }}>
+                              <Typography variant="subtitle1" fontWeight={600} mb={1}>
+                                <CodeIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                                Code Generation
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Extract commands from documents and generate cross-platform code
+                              </Typography>
+                            </Card>
+                          </Grid>
+                          <Grid item xs={12} md={6}>
+                            <Card sx={{ p: 2, bgcolor: '#fff' }}>
+                              <Typography variant="subtitle1" fontWeight={600} mb={1}>
+                                <CloudUpload sx={{ mr: 1, verticalAlign: 'middle' }} />
+                                Deployment Ready
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Generate deployment configurations and CI/CD pipelines
+                              </Typography>
+                            </Card>
+                          </Grid>
+                        </Grid>
+                      </Card>
+                      
+                      <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden', height: '70vh' }}>
+                        <AdvancedAIOrchestrator 
+                          googleToken={googleToken}
+                          onCodeGenerated={(code) => {
+                            setCrossPlatformCode(code);
+                            console.log('Generated cross-platform code:', code);
+                          }}
+                          onError={(error) => {
+                            console.error('AI Orchestrator error:', error);
+                          }}
                         />
                       </Card>
                     </Box>
