@@ -72,10 +72,22 @@ const AdvancedAIOrchestrator = ({ googleToken, onCodeGenerated, onError }) => {
         0.3
       );
 
-      const commands = JSON.parse(response.content || '[]');
-      setExtractedCommands(commands);
-      addLog(`Extracted ${commands.length} commands from document`, 'success');
-      return commands;
+      try {
+        const commands = JSON.parse(response);
+        setExtractedCommands(commands);
+        addLog(`Extracted ${commands.length} commands from document`, 'success');
+        return commands;
+      } catch (parseError) {
+        // If JSON parsing fails, create a structured command from the response
+        const fallbackCommand = {
+          type: 'code_generation',
+          description: response,
+          priority: 'high'
+        };
+        setExtractedCommands([fallbackCommand]);
+        addLog('Created fallback command from AI response', 'info');
+        return [fallbackCommand];
+      }
     } catch (error) {
       addLog(`Error extracting commands: ${error.message}`, 'error');
       return [];
@@ -115,10 +127,21 @@ const AdvancedAIOrchestrator = ({ googleToken, onCodeGenerated, onError }) => {
         0.4
       );
 
-      const code = JSON.parse(response.content || '{}');
-      setGeneratedCode(prev => ({ ...prev, [platform]: code }));
-      addLog(`Generated ${Object.keys(code).length} files for ${platform}`, 'success');
-      return code;
+      try {
+        const code = JSON.parse(response);
+        setGeneratedCode(prev => ({ ...prev, [platform]: code }));
+        addLog(`Generated ${Object.keys(code).length} files for ${platform}`, 'success');
+        return code;
+      } catch (parseError) {
+        // If JSON parsing fails, create a fallback code structure
+        const fallbackCode = {
+          [`${platform}-main.js`]: response,
+          [`${platform}-README.md`]: `# ${platform} Application\n\nGenerated from AI commands.\n\n## Setup\n\nInstall dependencies and run the application.`
+        };
+        setGeneratedCode(prev => ({ ...prev, [platform]: fallbackCode }));
+        addLog('Created fallback code structure from AI response', 'info');
+        return fallbackCode;
+      }
     } catch (error) {
       addLog(`Error generating ${platform} code: ${error.message}`, 'error');
       return {};
@@ -147,7 +170,7 @@ const AdvancedAIOrchestrator = ({ googleToken, onCodeGenerated, onError }) => {
       );
 
       addLog(`Analysis complete for ${platform}`, 'success');
-      return response.content;
+      return response;
     } catch (error) {
       addLog(`Error analyzing ${platform} code: ${error.message}`, 'error');
       return '';

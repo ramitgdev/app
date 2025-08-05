@@ -9,9 +9,9 @@ import {
   Tabs, Tab, Divider
 } from '@mui/material';
 import {
-  SmartToy, AutoAwesome, Lightbulb, Code, Description,
+  Star, Build, Code, Description,
   Slideshow, AccountTree, Brush, GitHub, Google,
-  ExpandMore, PlayArrow, Save, Share, Download
+  KeyboardArrowDown, PlayArrow, Save, Share, GetApp
 } from '@mui/icons-material';
 import { llmIntegration } from './llm-integration';
 
@@ -137,7 +137,7 @@ function HackathonAssistant({ onGenerateProject, onGenerateFlowchart, onGenerate
         return (
           <Card sx={{ p: 3 }}>
             <Typography variant="h6" mb={2}>
-              <Lightbulb color="primary" sx={{ mr: 1, verticalAlign: 'middle' }} />
+              <Star color="primary" sx={{ mr: 1, verticalAlign: 'middle' }} />
               Define Your Problem
             </Typography>
             <Stack spacing={3}>
@@ -161,7 +161,7 @@ function HackathonAssistant({ onGenerateProject, onGenerateFlowchart, onGenerate
                 variant="contained"
                 onClick={generateProjectIdea}
                 disabled={!problemStatement.trim() || loading}
-                startIcon={loading ? <CircularProgress size={20} /> : <AutoAwesome />}
+                startIcon={loading ? <CircularProgress size={20} /> : <Star />}
               >
                 Generate Project Idea
               </Button>
@@ -173,7 +173,7 @@ function HackathonAssistant({ onGenerateProject, onGenerateFlowchart, onGenerate
         return (
           <Card sx={{ p: 3 }}>
             <Typography variant="h6" mb={2}>
-              <AutoAwesome color="primary" sx={{ mr: 1, verticalAlign: 'middle' }} />
+              <Star color="primary" sx={{ mr: 1, verticalAlign: 'middle' }} />
               Generated Project Idea
             </Typography>
             {generatedProject ? (
@@ -209,7 +209,7 @@ function HackathonAssistant({ onGenerateProject, onGenerateFlowchart, onGenerate
                 <Button
                   variant="contained"
                   onClick={handleNext}
-                  startIcon={<AccountTree />}
+                  startIcon={<Build />}
                 >
                   Create Flowchart
                 </Button>
@@ -226,7 +226,7 @@ function HackathonAssistant({ onGenerateProject, onGenerateFlowchart, onGenerate
         return (
           <Card sx={{ p: 3 }}>
             <Typography variant="h6" mb={2}>
-              <AccountTree color="primary" sx={{ mr: 1, verticalAlign: 'middle' }} />
+              <Build color="primary" sx={{ mr: 1, verticalAlign: 'middle' }} />
               System Flowchart
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={2}>
@@ -236,7 +236,7 @@ function HackathonAssistant({ onGenerateProject, onGenerateFlowchart, onGenerate
               variant="contained"
               onClick={handleGenerateFlowchart}
               disabled={loading}
-              startIcon={loading ? <CircularProgress size={20} /> : <AutoAwesome />}
+              startIcon={loading ? <CircularProgress size={20} /> : <Star />}
             >
               Generate Flowchart
             </Button>
@@ -257,7 +257,7 @@ function HackathonAssistant({ onGenerateProject, onGenerateFlowchart, onGenerate
               variant="contained"
               onClick={handleGenerateDesignDoc}
               disabled={loading}
-              startIcon={loading ? <CircularProgress size={20} /> : <AutoAwesome />}
+              startIcon={loading ? <CircularProgress size={20} /> : <Star />}
             >
               Generate Design Document
             </Button>
@@ -278,7 +278,7 @@ function HackathonAssistant({ onGenerateProject, onGenerateFlowchart, onGenerate
               variant="contained"
               onClick={handleGenerateSlides}
               disabled={loading}
-              startIcon={loading ? <CircularProgress size={20} /> : <AutoAwesome />}
+              startIcon={loading ? <CircularProgress size={20} /> : <Star />}
             >
               Generate Slides
             </Button>
@@ -299,7 +299,7 @@ function HackathonAssistant({ onGenerateProject, onGenerateFlowchart, onGenerate
               variant="contained"
               onClick={handleGenerateCode}
               disabled={loading}
-              startIcon={loading ? <CircularProgress size={20} /> : <AutoAwesome />}
+              startIcon={loading ? <CircularProgress size={20} /> : <Star />}
             >
               Generate Code
             </Button>
@@ -316,7 +316,7 @@ function HackathonAssistant({ onGenerateProject, onGenerateFlowchart, onGenerate
       {/* Header */}
       <Paper sx={{ p: 2, mb: 2 }}>
         <Stack direction="row" alignItems="center" spacing={2}>
-          <SmartToy color="primary" />
+          <Star color="primary" />
           <Typography variant="h6" sx={{ flex: 1 }}>
             Hackathon AI Assistant
           </Typography>
@@ -376,7 +376,7 @@ function HackathonAssistant({ onGenerateProject, onGenerateFlowchart, onGenerate
       >
         <DialogTitle>
           <Stack direction="row" alignItems="center" spacing={1}>
-            <AutoAwesome color="primary" />
+            <Star color="primary" />
             <Typography>Generated Project Idea</Typography>
           </Stack>
         </DialogTitle>
