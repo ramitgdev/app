@@ -15,6 +15,8 @@ import {
   Storage as StorageIcon, Web as WebIcon, Mobile as MobileIcon
 } from '@mui/icons-material';
 import { llmIntegration } from './llm-integration';
+import { initiateGitHubLogin } from './github-oauth';
+import { GitHubAPI, sanitizeRepoName, convertFilesToGitHubFormat, validateGitHubToken } from './github-utils';
 
 export default function EnhancedAIAssistant({ 
   onClose, 
@@ -50,6 +52,45 @@ export default function EnhancedAIAssistant({
   });
   const [suggestions, setSuggestions] = useState([]);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+
+  // GitHub integration state
+  const [githubToken, setGithubToken] = useState(localStorage.getItem('github_token'));
+  const [githubUser, setGithubUser] = useState(null);
+  const [showGithubDialog, setShowGithubDialog] = useState(false);
+  const [githubRepoName, setGithubRepoName] = useState('');
+  const [githubRepoDescription, setGithubRepoDescription] = useState('');
+  const [isPrivateRepo, setIsPrivateRepo] = useState(false);
+  const [isGithubLoading, setIsGithubLoading] = useState(false);
+  const [lastCreatedFiles, setLastCreatedFiles] = useState([]);
+
+  // GitHub token validation and user info
+  useEffect(() => {
+    if (githubToken) {
+      validateAndSetUser();
+    }
+  }, [githubToken]);
+
+  const validateAndSetUser = async () => {
+    if (!githubToken) return;
+    
+    try {
+      const isValid = await validateGitHubToken(githubToken);
+      if (isValid) {
+        const api = new GitHubAPI(githubToken);
+        const userInfo = await api.getUserInfo();
+        setGithubUser(userInfo);
+      } else {
+        setGithubToken(null);
+        setGithubUser(null);
+        localStorage.removeItem('github_token');
+      }
+    } catch (error) {
+      console.error('Token validation failed:', error);
+      setGithubToken(null);
+      setGithubUser(null);
+      localStorage.removeItem('github_token');
+    }
+  };
 
   // Initialize with welcome message
   useEffect(() => {
@@ -384,7 +425,19 @@ Generate unique, appropriate content for each file type. No other text, just the
           console.log('Parsed structure:', structure);
           console.log('Files to create:', structure.files);
           
-          // Create files
+          // Create a project folder for the files
+          const projectName = intent.content.split('\n')[0].substring(0, 50).replace(/[^a-zA-Z0-9\s]/g, '').trim() || 'Generated Project';
+          const folderName = `${projectName} ${new Date().toLocaleDateString()}`;
+          const projectFolderId = Date.now() + Math.random();
+          
+          const projectFolder = {
+            id: projectFolderId,
+            text: folderName,
+            parent: activeFolder,
+            droppable: true
+          };
+
+          // Create files and assign them to the project folder
           const newFiles = structure.files.map(file => ({
             id: Date.now() + Math.random() + Math.random(),
             title: file.name,
@@ -392,17 +445,17 @@ Generate unique, appropriate content for each file type. No other text, just the
             tags: [file.name.split('.').pop() || 'file'],
             notes: file.content,
             platform: 'local',
-            folder: file.folder || activeFolder
+            folder: projectFolderId // Assign to project folder
           }));
           
           // Create folders if needed
-          const newFolders = [];
+          const newFolders = [projectFolder];
           if (structure.folders) {
             structure.folders.forEach(folder => {
               newFolders.push({
                 id: Date.now() + Math.random(),
                 text: folder.name,
-                parent: folder.parent || activeFolder,
+                parent: folder.parent || projectFolderId, // Make subfolders under project folder
                 droppable: true
               });
             });
@@ -416,18 +469,31 @@ Generate unique, appropriate content for each file type. No other text, just the
             setResources(prev => [...prev, ...newFiles]);
           }
           
-          setSnackbar({ open: true, message: `Created ${newFiles.length} files successfully`, severity: 'success' });
+          // Store files for potential GitHub push
+          setLastCreatedFiles(newFiles);
           
-          // Add success message
+          setSnackbar({ open: true, message: `Created ${newFiles.length} files in folder "${folderName}" successfully`, severity: 'success' });
+          
+          // Add success message with GitHub push option
           const successMessage = {
             id: Date.now() + 1,
             role: 'assistant',
-            content: `✅ Created ${newFiles.length} files in your workspace!
+            content: `✅ Created ${newFiles.length} files in folder "${folderName}"!
 
 Files created:
-${newFiles.map(f => `- ${f.title}`).join('\n')}`,
+${newFiles.map(f => `- ${f.title}`).join('\n')}
+
+📤 **Push to GitHub** - Upload these files to a new GitHub repository`,
             timestamp: new Date(),
-            type: 'files_created'
+            type: 'files_created',
+            actions: [
+              {
+                type: 'github_push',
+                label: '📤 Push to GitHub',
+                files: newFiles,
+                action: pushFilesToGitHub
+              }
+            ]
           };
           setMessages(prev => [...prev, successMessage]);
         } else {
@@ -505,18 +571,51 @@ ${newFiles.map(f => `- ${f.title}`).join('\n')}`,
         }
         
          if (filesToCreate.length > 0) {
+           // Create a project folder for fallback files too
+           const projectName = intent.content.split('\n')[0].substring(0, 50).replace(/[^a-zA-Z0-9\s]/g, '').trim() || 'Generated Project';
+           const folderName = `${projectName} ${new Date().toLocaleDateString()}`;
+           const projectFolderId = Date.now() + Math.random();
+           
+           const projectFolder = {
+             id: projectFolderId,
+             text: folderName,
+             parent: activeFolder,
+             droppable: true
+           };
+
+           // Update files to be in the project folder
+           filesToCreate.forEach(file => {
+             file.folder = projectFolderId;
+           });
+
+           // Add folder first, then files
+           addFoldersAndResources([projectFolder], []);
            setResources(prev => [...prev, ...filesToCreate]);
-           setSnackbar({ open: true, message: `Created ${filesToCreate.length} files using fallback method`, severity: 'success' });
+           
+           // Store files for GitHub push
+           setLastCreatedFiles(filesToCreate);
+           
+           setSnackbar({ open: true, message: `Created ${filesToCreate.length} files in folder "${folderName}" using fallback method`, severity: 'success' });
           
           const successMessage = {
             id: Date.now() + 1,
             role: 'assistant',
-            content: `✅ Created ${filesToCreate.length} files using fallback method!
+            content: `✅ Created ${filesToCreate.length} files in folder "${folderName}"!
 
 Files created:
-${filesToCreate.map(f => `- ${f.title}`).join('\n')}`,
+${filesToCreate.map(f => `- ${f.title}`).join('\n')}
+
+📤 **Push to GitHub** - Upload these files to a new GitHub repository`,
             timestamp: new Date(),
-            type: 'files_created'
+            type: 'files_created',
+            actions: [
+              {
+                type: 'github_push',
+                label: '📤 Push to GitHub',
+                files: filesToCreate,
+                action: pushFilesToGitHub
+              }
+            ]
           };
           setMessages(prev => [...prev, successMessage]);
         } else {
@@ -724,6 +823,130 @@ console.log('Hello, ${projectData.projectName}!');`,
     }
   };
 
+  // GitHub integration functions
+  const handleGitHubLogin = async () => {
+    try {
+      setIsGithubLoading(true);
+      const token = await initiateGitHubLogin();
+
+      const api = new GitHubAPI(token);
+      const userInfo = await api.getUserInfo();
+
+      setGithubToken(token);
+      setGithubUser(userInfo);
+      localStorage.setItem('github_token', token);
+
+      setSnackbar({ open: true, message: `GitHub connected successfully as @${userInfo.login}!`, severity: 'success' });
+    } catch (error) {
+      console.error('GitHub login error:', error);
+      setSnackbar({ open: true, message: 'GitHub login failed', severity: 'error' });
+      setGithubToken(null);
+      setGithubUser(null);
+      localStorage.removeItem('github_token');
+    } finally {
+      setIsGithubLoading(false);
+    }
+  };
+
+  const handleGitHubLogout = () => {
+    setGithubToken(null);
+    setGithubUser(null);
+    localStorage.removeItem('github_token');
+    setSnackbar({ open: true, message: 'Disconnected from GitHub', severity: 'info' });
+  };
+
+  const pushFilesToGitHub = async () => {
+    console.log('Push to GitHub clicked. Token:', !!githubToken, 'User:', !!githubUser, 'Files:', lastCreatedFiles.length);
+
+    if (!githubToken || !githubUser) {
+      console.error('GitHub not connected. Token:', !!githubToken, 'User:', githubUser);
+      setSnackbar({
+        open: true,
+        message: `Please connect to GitHub first. Token: ${!!githubToken}, User: ${!!githubUser}`,
+        severity: 'error'
+      });
+      return;
+    }
+
+    if (lastCreatedFiles.length === 0) {
+      setSnackbar({ open: true, message: 'No files to push. Create some files first!', severity: 'error' });
+      return;
+    }
+
+    console.log('Opening GitHub dialog...');
+    setShowGithubDialog(true);
+  };
+
+  const createGitHubRepository = async () => {
+    if (!githubRepoName.trim()) {
+      setSnackbar({ open: true, message: 'Please enter a repository name', severity: 'error' });
+      return;
+    }
+
+    try {
+      setIsGithubLoading(true);
+      const api = new GitHubAPI(githubToken);
+
+      // Create repository
+      const repoData = await api.createRepository(
+        sanitizeRepoName(githubRepoName),
+        githubRepoDescription,
+        isPrivateRepo
+      );
+
+      console.log('Repository created:', repoData);
+
+      // Convert files to GitHub format
+      const githubFiles = convertFilesToGitHubFormat(lastCreatedFiles);
+
+      // Push files to the repository
+      await api.pushMultipleFiles(
+        githubUser.login,
+        repoData.name,
+        githubFiles,
+        `Initial commit: Added ${githubFiles.length} files`
+      );
+
+      setSnackbar({
+        open: true,
+        message: `Successfully created repository "${repoData.name}" and pushed ${githubFiles.length} files!`,
+        severity: 'success'
+      });
+
+      // Add success message
+      const successMessage = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: `🎉 **Repository Created Successfully!**
+
+📦 **Repository**: [${repoData.name}](${repoData.html_url})
+📁 **Files pushed**: ${githubFiles.length}
+🔗 **URL**: ${repoData.html_url}
+
+Your files have been successfully uploaded to GitHub!`,
+        timestamp: new Date(),
+        type: 'github_success'
+      };
+      setMessages(prev => [...prev, successMessage]);
+
+      // Reset dialog
+      setShowGithubDialog(false);
+      setGithubRepoName('');
+      setGithubRepoDescription('');
+      setIsPrivateRepo(false);
+
+    } catch (error) {
+      console.error('GitHub repository creation failed:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to create repository: ${error.message}`,
+        severity: 'error'
+      });
+    } finally {
+      setIsGithubLoading(false);
+    }
+  };
+
   const renderMessage = (message) => {
     return (
       <Box
@@ -802,9 +1025,40 @@ console.log('Hello, ${projectData.projectName}!');`,
               Enhanced AI Assistant
             </Typography>
           </Box>
-          <IconButton onClick={onClose} sx={{ color: 'white' }}>
-            <SendIcon />
-          </IconButton>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* GitHub Status Indicator */}
+            {githubUser ? (
+              <Tooltip title={`Connected as @${githubUser.login}`}>
+                <Chip
+                  label={`@${githubUser.login}`}
+                  size="small"
+                  color="success"
+                  variant="outlined"
+                  sx={{ color: 'white', borderColor: 'rgba(255,255,255,0.5)' }}
+                  onClick={handleGitHubLogout}
+                />
+              </Tooltip>
+            ) : (
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={handleGitHubLogin}
+                disabled={isGithubLoading}
+                sx={{ 
+                  color: 'white', 
+                  borderColor: 'rgba(255,255,255,0.5)',
+                  fontSize: '0.75rem',
+                  minWidth: 'auto',
+                  px: 1
+                }}
+              >
+                {isGithubLoading ? <CircularProgress size={16} color="inherit" /> : 'GitHub'}
+              </Button>
+            )}
+            <IconButton onClick={onClose} sx={{ color: 'white' }}>
+              <SendIcon />
+            </IconButton>
+          </Box>
         </Box>
 
         {/* Messages */}
@@ -1061,6 +1315,60 @@ console.log('Hello, ${projectData.projectName}!');`,
             disabled={isLoading}
           >
             {isLoading ? 'Generating...' : 'Generate Project'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* GitHub Repository Creation Dialog */}
+      <Dialog open={showGithubDialog} onClose={() => setShowGithubDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          📤 Push to GitHub Repository
+          {githubUser && (
+            <Typography variant="body2" color="textSecondary">
+              Logged in as @{githubUser.login}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              label="Repository Name"
+              value={githubRepoName}
+              onChange={(e) => setGithubRepoName(e.target.value)}
+              placeholder="my-awesome-project"
+              fullWidth
+            />
+            <TextField
+              label="Description (optional)"
+              value={githubRepoDescription}
+              onChange={(e) => setGithubRepoDescription(e.target.value)}
+              placeholder="Generated by Enhanced AI Assistant"
+              multiline
+              rows={2}
+              fullWidth
+            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <input
+                type="checkbox"
+                checked={isPrivateRepo}
+                onChange={(e) => setIsPrivateRepo(e.target.checked)}
+              />
+              <Typography variant="body2">Make repository private</Typography>
+            </Box>
+            <Typography variant="body2" color="textSecondary">
+              This will create a new repository and push {lastCreatedFiles.length} files to it.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowGithubDialog(false)}>Cancel</Button>
+          <Button
+            onClick={createGitHubRepository}
+            variant="contained"
+            disabled={isGithubLoading || !githubRepoName.trim()}
+            startIcon={isGithubLoading ? <CircularProgress size={16} /> : null}
+          >
+            {isGithubLoading ? 'Creating...' : 'Create & Push'}
           </Button>
         </DialogActions>
       </Dialog>
