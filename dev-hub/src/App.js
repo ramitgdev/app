@@ -1038,6 +1038,51 @@ async function insertTextGoogleDoc(documentId, text, googleToken) {
   return await res.json();
 }
 
+// Extract readable text content from Google Doc API response
+function extractGoogleDocText(docData) {
+  if (!docData || !docData.body || !docData.body.content) {
+    return '';
+  }
+
+  let text = '';
+  
+  function processContent(content) {
+    for (const element of content) {
+      if (element.paragraph) {
+        // Process paragraph elements
+        if (element.paragraph.elements) {
+          for (const elem of element.paragraph.elements) {
+            if (elem.textRun && elem.textRun.content) {
+              text += elem.textRun.content;
+            }
+          }
+        }
+      } else if (element.table) {
+        // Process table elements
+        if (element.table.tableRows) {
+          for (const row of element.table.tableRows) {
+            if (row.tableCells) {
+              for (const cell of row.tableCells) {
+                if (cell.content) {
+                  processContent(cell.content);
+                }
+              }
+            }
+          }
+        }
+      } else if (element.tableOfContents) {
+        // Process table of contents
+        if (element.tableOfContents.content) {
+          processContent(element.tableOfContents.content);
+        }
+      }
+    }
+  }
+
+  processContent(docData.body.content);
+  return text.trim();
+}
+
 async function fetchWorkspaceChats(workspaceId, myId, recipientId) {
   let query = supabase
     .from('workspace_chats')
@@ -1859,7 +1904,7 @@ export default function App() {
     {
       id: 1,
       role: 'assistant',
-      content: "Hello! I'm your global AI assistant powered by Groq. I can help you with code, documents, create files and projects, manage your workspace, and more across all tabs. What would you like to work on?",
+      content: "Hello! I'm your global AI assistant powered by Groq. I can help you with code, analyze Google Docs, create and edit files, generate projects, manage your workspace, and more across all tabs. What would you like to work on?",
       timestamp: new Date()
     }
   ]);
@@ -1993,6 +2038,12 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
       } else if (intent.type === 'create_project') {
         globalHandleProjectCreation(intent);
         return;
+      } else if (intent.type === 'edit_file') {
+        globalHandleFileEdit(intent);
+        return;
+      } else if (intent.type === 'analyze_google_doc') {
+        globalHandleGoogleDocAnalysis(intent);
+        return;
       } else if (intent.type === 'workspace_analysis') {
         globalHandleWorkspaceAnalysis(currentInput);
         return;
@@ -2004,6 +2055,12 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
       // Add workspace context for better file suggestions
       const workspaceContext = getGlobalWorkspaceContext();
       context += `${workspaceContext}. `;
+      
+      // Add Google Doc context if available
+      const googleDocContext = await getGoogleDocContext();
+      if (googleDocContext) {
+        context += `Current Google Doc: "${googleDocContext.title}" - Content preview: ${googleDocContext.content.substring(0, 500)}${googleDocContext.content.length > 500 ? '...' : ''}. `;
+      }
       
       // Add tab-specific context
       if (activeDevelopmentTab === 'web-ide') {
@@ -2019,6 +2076,9 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
         context += `User is in the GitHub editor. `;
       } else if (activeDevelopmentTab === 'gdocs') {
         context += `User is in Google Docs editor. `;
+        if (googleDocContext) {
+          context += `Full Google Doc content:\n\`\`\`\n${googleDocContext.content}\n\`\`\`\n\n`;
+        }
       } else if (activeDevelopmentTab === 'hackathon') {
         context += `User is in the Hackathon AI assistant. `;
       }
@@ -2375,6 +2435,45 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
               </Box>
             )}
 
+            {message.editedFile && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="caption" color="text.secondary">
+                  File Edited:
+                </Typography>
+                <Box sx={{ mt: 1 }}>
+                  <Chip
+                    label={`📝 ${message.editedFile.name}`}
+                    size="small"
+                    color="success"
+                    variant="outlined"
+                    icon={<EditIcon />}
+                  />
+                </Box>
+              </Box>
+            )}
+
+            {message.googleDoc && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Google Doc Analyzed:
+                </Typography>
+                <Box sx={{ mt: 1 }}>
+                  <Chip
+                    label={`📄 ${message.googleDoc.title}`}
+                    size="small"
+                    color="info"
+                    variant="outlined"
+                    icon={<ArticleIcon />}
+                    onClick={() => window.open(message.googleDoc.url, '_blank')}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                  <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
+                    {message.googleDoc.contentLength} characters
+                  </Typography>
+                </Box>
+              </Box>
+            )}
+
             {message.actions && (
               <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                 {message.actions.map((action, index) => (
@@ -2439,6 +2538,18 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
       return { type: 'create_project', projectName: extractProjectName(input) };
     }
     
+    // File editing patterns
+    if ((lowerInput.includes('edit') || lowerInput.includes('modify') || lowerInput.includes('update') || lowerInput.includes('change') || lowerInput.includes('implement') || lowerInput.includes('fix')) && 
+        (lowerInput.includes('file') || lowerInput.includes('code') || lowerInput.includes('function') || lowerInput.includes('in this file') || lowerInput.includes('in the file'))) {
+      return { type: 'edit_file', fileName: extractFileNameForEditing(input), request: input };
+    }
+    
+    // Google Doc analysis patterns
+    if ((lowerInput.includes('analyze') || lowerInput.includes('summarize') || lowerInput.includes('review') || lowerInput.includes('read') || lowerInput.includes('what') || lowerInput.includes('tell me about')) && 
+        (lowerInput.includes('doc') || lowerInput.includes('document') || lowerInput.includes('google doc'))) {
+      return { type: 'analyze_google_doc', request: input };
+    }
+    
     // Workspace analysis patterns
     if (lowerInput.includes('analyze') || lowerInput.includes('suggest') || lowerInput.includes('improve')) {
       return { type: 'workspace_analysis' };
@@ -2457,8 +2568,80 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
     return match ? match[1] : '';
   };
 
+  const extractFileNameForEditing = (input) => {
+    // Look for file names mentioned in the input
+    const patterns = [
+      /(?:in|edit|modify|update|change|implement|fix)\s+(?:the\s+)?(?:file\s+)?([a-zA-Z0-9._/-]+\.(?:js|ts|jsx|tsx|html|css|json|md|py|java|cpp|c|h))/i,
+      /(?:file\s+)([a-zA-Z0-9._/-]+\.(?:js|ts|jsx|tsx|html|css|json|md|py|java|cpp|c|h))/i,
+      /([a-zA-Z0-9._/-]+\.(?:js|ts|jsx|tsx|html|css|json|md|py|java|cpp|c|h))/i
+    ];
+    
+    for (const pattern of patterns) {
+      const match = input.match(pattern);
+      if (match) return match[1];
+    }
+    return '';
+  };
+
+  const globalFindFileByName = (fileName) => {
+    if (!fileName) return null;
+    
+    // First try exact match
+    let file = resources.find(r => r.title === fileName);
+    if (file) return file;
+    
+    // Try partial match (case insensitive)
+    file = resources.find(r => r.title.toLowerCase().includes(fileName.toLowerCase()));
+    if (file) return file;
+    
+    // Try without extension
+    const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
+    file = resources.find(r => r.title.toLowerCase().includes(nameWithoutExt.toLowerCase()));
+    if (file) return file;
+    
+    return null;
+  };
+
+  const globalGetFileContent = (file) => {
+    return file?.notes || '';
+  };
+
+  const globalUpdateFileContent = (fileId, newContent) => {
+    setResources(prev => prev.map(resource => 
+      resource.id === fileId 
+        ? { ...resource, notes: newContent }
+        : resource
+    ));
+  };
+
   const getGlobalWorkspaceContext = () => {
     return `Workspace has ${folders.length} folders and ${resources.length} files. Active folder: ${folders.find(f => f.id === activeFolder)?.text || 'Root'}`;
+  };
+
+  // Get current Google Doc content if available
+  const getGoogleDocContext = async () => {
+    if (!googleDocUrl || !googleToken) {
+      return null;
+    }
+
+    try {
+      const match = googleDocUrl.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+      if (!match) return null;
+
+      const documentId = match[1];
+      const docData = await fetchGoogleDoc(documentId, googleToken);
+      const docText = extractGoogleDocText(docData);
+      
+      return {
+        documentId,
+        title: docData.title || 'Untitled Document',
+        content: docText,
+        url: googleDocUrl
+      };
+    } catch (error) {
+      console.error('Error fetching Google Doc content:', error);
+      return null;
+    }
   };
 
   const globalHandleFileCreation = async (intent) => {
@@ -2491,6 +2674,206 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
     };
 
     setGlobalChatMessages(prev => [...prev, assistantMessage]);
+  };
+
+  const globalHandleGoogleDocAnalysis = async (intent) => {
+    try {
+      setIsGlobalChatLoading(true);
+      
+      const googleDocContext = await getGoogleDocContext();
+      
+      if (!googleDocContext) {
+        setGlobalSnackbar({
+          open: true,
+          message: 'No Google Doc is currently open. Please open a Google Doc first.',
+          severity: 'error'
+        });
+        return;
+      }
+
+      if (!googleDocContext.content.trim()) {
+        setGlobalSnackbar({
+          open: true,
+          message: 'The Google Doc appears to be empty.',
+          severity: 'info'
+        });
+        return;
+      }
+
+      // Create AI prompt for Google Doc analysis
+      const analysisPrompt = `You are analyzing a Google Doc. Please provide a comprehensive analysis based on the user's request.
+
+GOOGLE DOC DETAILS:
+Title: ${googleDocContext.title}
+Content Length: ${googleDocContext.content.length} characters
+
+FULL CONTENT:
+\`\`\`
+${googleDocContext.content}
+\`\`\`
+
+USER REQUEST: ${intent.request}
+
+Please provide a detailed analysis, summary, or response based on the document content and the user's specific request.`;
+
+      const response = await llmIntegration.chatWithAI(analysisPrompt, []);
+      
+      // Add assistant message with Google Doc context
+      const assistantMessage = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: `📄 **Google Doc Analysis: "${googleDocContext.title}"**
+
+${response}
+
+📊 **Document Stats:**
+- Length: ${googleDocContext.content.length} characters
+- Word count: ~${Math.ceil(googleDocContext.content.split(/\s+/).length)} words
+- URL: [Open in Google Docs](${googleDocContext.url})`,
+        timestamp: new Date(),
+        type: 'google_doc_analysis',
+        googleDoc: {
+          title: googleDocContext.title,
+          url: googleDocContext.url,
+          contentLength: googleDocContext.content.length
+        }
+      };
+      
+      setGlobalChatMessages(prev => [...prev, assistantMessage]);
+      
+    } catch (error) {
+      console.error('Error analyzing Google Doc:', error);
+      setGlobalSnackbar({
+        open: true,
+        message: 'Error analyzing Google Doc',
+        severity: 'error'
+      });
+    } finally {
+      setIsGlobalChatLoading(false);
+    }
+  };
+
+  const globalHandleFileEdit = async (intent) => {
+    try {
+      setIsGlobalChatLoading(true);
+      
+      let targetFile = null;
+      
+      // If specific file name provided, search for it
+      if (intent.fileName) {
+        targetFile = globalFindFileByName(intent.fileName);
+      }
+      
+      // If no file found and no specific name, try to find from context
+      if (!targetFile) {
+        // Get list of recent files or suggest files to edit
+        const availableFiles = resources.filter(r => 
+          r.title.match(/\.(js|ts|jsx|tsx|html|css|json|md|py|java|cpp|c|h)$/i)
+        ).slice(0, 10);
+        
+        if (availableFiles.length === 0) {
+          setGlobalSnackbar({ 
+            open: true, 
+            message: 'No code files found in workspace to edit', 
+            severity: 'error' 
+          });
+          return;
+        }
+        
+        // Ask user to select a file if multiple options
+        if (availableFiles.length > 1 && !intent.fileName) {
+          const fileList = availableFiles.map(f => `- ${f.title}`).join('\n');
+          const selectMessage = {
+            id: Date.now() + 1,
+            role: 'assistant',
+            content: `I found multiple files that could be edited. Please specify which file you'd like me to work on:
+
+${fileList}
+
+Please say something like "edit App.js" or "implement the function in utils.js"`,
+            timestamp: new Date(),
+            type: 'file_selection'
+          };
+          setGlobalChatMessages(prev => [...prev, selectMessage]);
+          return;
+        }
+        
+        // Use the first file if only one option
+        targetFile = availableFiles[0];
+      }
+      
+      if (!targetFile) {
+        setGlobalSnackbar({ 
+          open: true, 
+          message: `File "${intent.fileName}" not found in workspace`, 
+          severity: 'error' 
+        });
+        return;
+      }
+      
+      // Get current file content
+      const currentContent = globalGetFileContent(targetFile);
+      
+      // Create AI prompt for editing
+      const editPrompt = `You are editing the file "${targetFile.title}". 
+
+CURRENT FILE CONTENT:
+\`\`\`
+${currentContent}
+\`\`\`
+
+USER REQUEST: ${intent.request}
+
+Please provide the COMPLETE updated file content with the requested changes implemented. Make sure to:
+1. Keep all existing code that should remain
+2. Implement the requested changes accurately
+3. Follow best practices and maintain code style
+4. Add appropriate comments if implementing new functions
+5. Ensure the code is syntactically correct
+
+Return ONLY the complete updated file content, no explanations or markdown formatting:`;
+
+      const response = await llmIntegration.chatWithAI(editPrompt, []);
+      
+      // Update the file content
+      globalUpdateFileContent(targetFile.id, response);
+      
+      // Show success message
+      setGlobalSnackbar({ 
+        open: true, 
+        message: `Successfully updated ${targetFile.title}`, 
+        severity: 'success' 
+      });
+      
+      // Add assistant message
+      const assistantMessage = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: `✅ **File Updated Successfully!**
+
+📁 **File**: ${targetFile.title}
+🔧 **Changes**: ${intent.request}
+
+I've implemented the requested changes in your file. You can now view the updated content in your workspace.`,
+        timestamp: new Date(),
+        type: 'file_edited',
+        editedFile: {
+          name: targetFile.title,
+          id: targetFile.id
+        }
+      };
+      setGlobalChatMessages(prev => [...prev, assistantMessage]);
+      
+    } catch (error) {
+      console.error('Error editing file:', error);
+      setGlobalSnackbar({ 
+        open: true, 
+        message: 'Error editing file', 
+        severity: 'error' 
+      });
+    } finally {
+      setIsGlobalChatLoading(false);
+    }
   };
 
   const globalHandleMultipleFileCreation = async (intent) => {
@@ -4525,6 +4908,93 @@ useEffect(() => {
               <Button
                 size="small"
                 variant="outlined"
+                startIcon={<EditIcon />}
+                onClick={() => {
+                  const availableFiles = resources.filter(r => 
+                    r.title.match(/\.(js|ts|jsx|tsx|html|css|json|md|py|java|cpp|c|h)$/i)
+                  );
+                  
+                  if (availableFiles.length === 0) {
+                    setGlobalSnackbar({ 
+                      open: true, 
+                      message: 'No code files found to edit', 
+                      severity: 'info' 
+                    });
+                    return;
+                  }
+                  
+                  const fileList = availableFiles.slice(0, 10).map(f => `- ${f.title}`).join('\n');
+                  const message = {
+                    id: Date.now() + 1,
+                    role: 'assistant',
+                    content: `📝 **Available files to edit:**
+
+${fileList}
+
+Please tell me which file you'd like to edit and what changes you want to make. For example:
+- "Edit App.js and add a new function"
+- "Implement the calculateTotal function in utils.js"
+- "Fix the styling in styles.css"`,
+                    timestamp: new Date(),
+                    type: 'file_list'
+                  };
+                  setGlobalChatMessages(prev => [...prev, message]);
+                }}
+              >
+                Edit File
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<ArticleIcon />}
+                onClick={async () => {
+                  const googleDocContext = await getGoogleDocContext();
+                  
+                  if (!googleDocContext) {
+                    setGlobalSnackbar({ 
+                      open: true, 
+                      message: 'No Google Doc is currently open. Please open a Google Doc first.', 
+                      severity: 'info' 
+                    });
+                    return;
+                  }
+                  
+                  const message = {
+                    id: Date.now() + 1,
+                    role: 'assistant',
+                    content: `📄 **Current Google Doc: "${googleDocContext.title}"**
+
+I can help you analyze, summarize, or work with this document. Here are some things you can ask me:
+
+- "Analyze this document"
+- "Summarize the main points"
+- "What is this document about?"
+- "Review the content for clarity"
+- "Generate code based on this document"
+- "Create a project from these specifications"
+
+**Document Stats:**
+- Length: ${googleDocContext.content.length} characters
+- Word count: ~${Math.ceil(googleDocContext.content.split(/\s+/).length)} words
+
+What would you like me to do with this document?`,
+                    timestamp: new Date(),
+                    type: 'google_doc_prompt',
+                    googleDoc: {
+                      title: googleDocContext.title,
+                      url: googleDocContext.url,
+                      contentLength: googleDocContext.content.length
+                    }
+                  };
+                  setGlobalChatMessages(prev => [...prev, message]);
+                }}
+                disabled={!googleDocUrl || !googleToken}
+              >
+                Analyze Doc
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
                 startIcon={<FolderIcon />}
                 onClick={() => {
                   // Add folder functionality
@@ -4574,7 +5044,7 @@ useEffect(() => {
                 maxRows={3}
                 value={globalChatInput}
                 onChange={(e) => setGlobalChatInput(e.target.value)}
-                placeholder="Ask me to create files, generate projects, edit docs, write code, or help with anything..."
+                placeholder="Ask me to analyze docs, create files, edit code, generate projects, implement functions, or help with anything..."
                 onKeyPress={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
