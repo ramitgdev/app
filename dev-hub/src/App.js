@@ -58,6 +58,8 @@ import CodeIcon from '@mui/icons-material/Code';
 import ArticleIcon from '@mui/icons-material/Article';
 import Star from '@mui/icons-material/Star';
 import Build from '@mui/icons-material/Build';
+import CreateIcon from '@mui/icons-material/Create';
+import BuildIcon from '@mui/icons-material/Build';
 import CloudUpload from '@mui/icons-material/CloudUpload';
 import SettingsIcon from '@mui/icons-material/Settings';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -68,6 +70,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import EnhancedAudioRecorder from './EnhancedAudioRecorder';
 import AICodeReviewer from './AICodeReviewer';
 import { initiateGitHubLogin, handleGitHubCallback } from './github-oauth';
+import { GitHubAPI, sanitizeRepoName, convertFilesToGitHubFormat, validateGitHubToken } from './github-utils';
 import GoogleSlidesEditor from './GoogleSlidesEditor';
 import FlowchartEditor from './FlowchartEditor';
 import CanvaEditor from './CanvaEditor';
@@ -1856,7 +1859,7 @@ export default function App() {
     {
       id: 1,
       role: 'assistant',
-      content: "Hello! I'm your global AI assistant powered by Groq. I can help you with code, documents, projects, and more across all tabs. What would you like to work on?",
+      content: "Hello! I'm your global AI assistant powered by Groq. I can help you with code, documents, create files and projects, manage your workspace, and more across all tabs. What would you like to work on?",
       timestamp: new Date()
     }
   ]);
@@ -1866,6 +1869,34 @@ export default function App() {
   const [docActionMessage, setDocActionMessage] = useState('');
   const [showDocActionAlert, setShowDocActionAlert] = useState(false);
   const [editorData, setEditorData] = useState(null);
+
+  // Global AI File Management state
+  const [showGlobalFileCreator, setShowGlobalFileCreator] = useState(false);
+  const [globalFileCreatorData, setGlobalFileCreatorData] = useState({
+    fileName: '',
+    fileType: 'js',
+    content: '',
+    folder: 0
+  });
+  const [showGlobalProjectGenerator, setShowGlobalProjectGenerator] = useState(false);
+  const [globalProjectData, setGlobalProjectData] = useState({
+    projectName: '',
+    projectType: 'web-app',
+    techStack: [],
+    description: ''
+  });
+  const [globalSuggestions, setGlobalSuggestions] = useState([]);
+  const [globalSnackbar, setGlobalSnackbar] = useState({ open: false, message: '', severity: 'info' });
+  const [globalLastCreatedFiles, setGlobalLastCreatedFiles] = useState([]);
+
+  // Global AI GitHub integration state
+  const [globalGithubToken, setGlobalGithubToken] = useState(localStorage.getItem('github_token'));
+  const [globalGithubUser, setGlobalGithubUser] = useState(null);
+  const [showGlobalGithubDialog, setShowGlobalGithubDialog] = useState(false);
+  const [globalGithubRepoName, setGlobalGithubRepoName] = useState('');
+  const [globalGithubRepoDescription, setGlobalGithubRepoDescription] = useState('');
+  const [globalIsPrivateRepo, setGlobalIsPrivateRepo] = useState(false);
+  const [globalIsGithubLoading, setGlobalIsGithubLoading] = useState(false);
   
   // Sidebar interface state
   const [sidebarApp, setSidebarApp] = useState(null);
@@ -1950,8 +1981,29 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
         return;
       }
 
+      // Analyze the user's intent for file operations
+      const intent = globalAnalyzeUserIntent(currentInput);
+      
+      if (intent.type === 'create_file') {
+        globalHandleFileCreation(intent);
+        return;
+      } else if (intent.type === 'create_multiple_files') {
+        globalHandleMultipleFileCreation(intent);
+        return;
+      } else if (intent.type === 'create_project') {
+        globalHandleProjectCreation(intent);
+        return;
+      } else if (intent.type === 'workspace_analysis') {
+        globalHandleWorkspaceAnalysis(currentInput);
+        return;
+      }
+
       // Build context based on current tab
       let context = `Current tab: ${activeDevelopmentTab}. `;
+      
+      // Add workspace context for better file suggestions
+      const workspaceContext = getGlobalWorkspaceContext();
+      context += `${workspaceContext}. `;
       
       // Add tab-specific context
       if (activeDevelopmentTab === 'web-ide') {
@@ -1980,6 +2032,21 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
           content: msg.content
         }))
       );
+
+      // Check if the response contains file structure suggestions
+      if (response.includes('file explorer') || response.includes('File Explorer') || 
+          response.includes('new file') || response.includes('created') ||
+          response.includes('jsx') || response.includes('js') || response.includes('json') ||
+          response.includes('package.json') || response.includes('app.js') ||
+          response.includes('components/') || response.includes('screens/') || response.includes('utils/')) {
+        
+        // Automatically trigger file creation
+        const fileCreationIntent = {
+          type: 'create_multiple_files',
+          content: response
+        };
+        globalHandleMultipleFileCreation(fileCreationIntent);
+      }
 
       // Check if response contains code suggestions
       const codeBlockRegex = /```(?:javascript|js|python|java|cpp|html|css)?\n([\s\S]*?)```/g;
@@ -2289,6 +2356,45 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
               </Box>
             )}
             
+            {message.fileSuggestion && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Files Created:
+                </Typography>
+                <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  {message.fileSuggestion.map((file, index) => (
+                    <Chip
+                      key={index}
+                      label={file.title}
+                      size="small"
+                      color="primary"
+                      variant="outlined"
+                    />
+                  ))}
+                </Box>
+              </Box>
+            )}
+
+            {message.actions && (
+              <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                {message.actions.map((action, index) => (
+                  <Button
+                    key={index}
+                    size="small"
+                    variant="outlined"
+                    onClick={() => {
+                      if (action === 'github_push') {
+                        globalPushFilesToGitHub();
+                      }
+                    }}
+                    startIcon={action === 'github_push' ? <GitHubIcon /> : null}
+                  >
+                    {action === 'github_push' ? 'Push to GitHub' : action}
+                  </Button>
+                ))}
+              </Box>
+            )}
+            
             {message.tabSwitched && (
               <Chip
                 label={`Switched to ${message.tabSwitched} tab`}
@@ -2311,6 +2417,376 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
         </Box>
       </Box>
     );
+  };
+
+  // Global AI File Management Functions
+  const globalAnalyzeUserIntent = (input) => {
+    const lowerInput = input.toLowerCase();
+    
+    // File creation patterns
+    if (lowerInput.includes('create file') || lowerInput.includes('make file') || lowerInput.includes('new file')) {
+      return { type: 'create_file', fileName: extractFileName(input) };
+    }
+    
+    // Multiple file creation patterns
+    if (lowerInput.includes('make these files') || lowerInput.includes('create these files') || 
+        lowerInput.includes('add these files') || lowerInput.includes('generate these files')) {
+      return { type: 'create_multiple_files', content: input };
+    }
+    
+    // Project creation patterns
+    if (lowerInput.includes('create project') || lowerInput.includes('new project') || lowerInput.includes('start project')) {
+      return { type: 'create_project', projectName: extractProjectName(input) };
+    }
+    
+    // Workspace analysis patterns
+    if (lowerInput.includes('analyze') || lowerInput.includes('suggest') || lowerInput.includes('improve')) {
+      return { type: 'workspace_analysis' };
+    }
+    
+    return { type: 'general' };
+  };
+
+  const extractFileName = (input) => {
+    const match = input.match(/(?:create|make|new)\s+(?:file\s+)?([a-zA-Z0-9._-]+)/i);
+    return match ? match[1] : '';
+  };
+
+  const extractProjectName = (input) => {
+    const match = input.match(/(?:create|make|new)\s+(?:project\s+)?([a-zA-Z0-9._-]+)/i);
+    return match ? match[1] : '';
+  };
+
+  const getGlobalWorkspaceContext = () => {
+    return `Workspace has ${folders.length} folders and ${resources.length} files. Active folder: ${folders.find(f => f.id === activeFolder)?.text || 'Root'}`;
+  };
+
+  const globalHandleFileCreation = async (intent) => {
+    if (intent.fileName) {
+      setGlobalFileCreatorData(prev => ({ ...prev, fileName: intent.fileName }));
+    }
+    setShowGlobalFileCreator(true);
+  };
+
+  const globalHandleProjectCreation = async (intent) => {
+    if (intent.projectName) {
+      setGlobalProjectData(prev => ({ ...prev, projectName: intent.projectName }));
+    }
+    setShowGlobalProjectGenerator(true);
+  };
+
+  const globalHandleWorkspaceAnalysis = async (input) => {
+    const context = getGlobalWorkspaceContext();
+    const response = await llmIntegration.chatWithAI(
+      `Analyze this workspace and provide specific, actionable suggestions. ${context}. User request: ${input}`,
+      []
+    );
+
+    const assistantMessage = {
+      id: Date.now() + 1,
+      role: 'assistant',
+      content: response,
+      timestamp: new Date(),
+      type: 'analysis'
+    };
+
+    setGlobalChatMessages(prev => [...prev, assistantMessage]);
+  };
+
+  const globalHandleMultipleFileCreation = async (intent) => {
+    try {
+      setIsGlobalChatLoading(true);
+      
+      // Ask AI to parse the file structure and create files
+      const prompt = `Extract file names from this text and create appropriate, unique content for each file:
+
+${intent.content}
+
+IMPORTANT: Create DIFFERENT content for each file based on its name and purpose.
+
+Return ONLY this JSON format:
+{"files":[
+  {"name":"app.js","content":"// Main application file\\nconsole.log('App started');"},
+  {"name":"styles.css","content":"/* Main styles */\\nbody { margin: 0; }"},
+  {"name":"package.json","content":"{\\n  \\"name\\": \\"my-app\\",\\n  \\"version\\": \\"1.0.0\\"\\n}"}
+]}
+
+Generate unique, appropriate content for each file type. No other text, just the JSON.`;
+
+      const response = await llmIntegration.chatWithAI(prompt, []);
+      
+      try {
+        console.log('AI Response:', response);
+        
+        // Extract files manually using regex - more reliable than JSON.parse with multiline content
+        const filePattern = /{"name":"([^"]+)","content":"((?:[^"\\]|\\.)*)"/g;
+        const extractedFiles = [];
+        let match;
+        
+        while ((match = filePattern.exec(response)) !== null) {
+          const fileName = match[1];
+          let content = match[2];
+          
+          // Unescape the content
+          content = content
+            .replace(/\\n/g, '\n')
+            .replace(/\\r/g, '\r')
+            .replace(/\\t/g, '\t')
+            .replace(/\\"/g, '"')
+            .replace(/\\\\/g, '\\');
+          
+          extractedFiles.push({
+            name: fileName,
+            content: content
+          });
+        }
+        
+        console.log('Extracted files:', extractedFiles);
+        
+        if (extractedFiles.length > 0) {
+          const structure = { files: extractedFiles };
+          console.log('Parsed structure:', structure);
+          
+          // Create a project folder for the files
+          const projectName = intent.content.split('\n')[0].substring(0, 50).replace(/[^a-zA-Z0-9\s]/g, '').trim() || 'Generated Project';
+          const folderName = `${projectName} ${new Date().toLocaleDateString()}`;
+          const projectFolderId = Date.now() + Math.random();
+          
+          const projectFolder = {
+            id: projectFolderId,
+            text: folderName,
+            parent: activeFolder,
+            droppable: true
+          };
+
+          // Create files and assign them to the project folder
+          const newFiles = structure.files.map(file => ({
+            id: Date.now() + Math.random() + Math.random(),
+            title: file.name,
+            url: `file://${file.name}`,
+            tags: [file.name.split('.').pop() || 'file'],
+            notes: file.content,
+            platform: 'local',
+            folder: projectFolderId
+          }));
+          
+          // Add to workspace
+          if (addFoldersAndResources) {
+            addFoldersAndResources([projectFolder], []);
+          }
+          if (setResources) {
+            setResources(prev => [...prev, ...newFiles]);
+          }
+          
+          // Store files for potential GitHub push
+          setGlobalLastCreatedFiles(newFiles);
+          
+          setGlobalSnackbar({ open: true, message: `Created ${newFiles.length} files in folder "${folderName}" successfully`, severity: 'success' });
+          
+          // Add success message with GitHub push option
+          const successMessage = {
+            id: Date.now() + 1,
+            role: 'assistant',
+            content: `✅ Created ${newFiles.length} files in folder "${folderName}"!
+
+Files created:
+${newFiles.map(f => `- ${f.title}`).join('\n')}
+
+📤 **Push to GitHub** - Upload these files to a new GitHub repository`,
+            timestamp: new Date(),
+            type: 'files_created',
+            fileSuggestion: newFiles,
+            actions: ['github_push']
+          };
+          setGlobalChatMessages(prev => [...prev, successMessage]);
+        } else {
+          console.log('No files extracted from AI response');
+          throw new Error('No files found in AI response');
+        }
+      } catch (parseError) {
+        console.error('Failed to parse file structure:', parseError);
+        setGlobalSnackbar({ open: true, message: 'Failed to create files. Please try again.', severity: 'error' });
+      }
+    } catch (error) {
+      console.error('Error creating multiple files:', error);
+      setGlobalSnackbar({ open: true, message: 'Error creating files', severity: 'error' });
+    } finally {
+      setIsGlobalChatLoading(false);
+    }
+  };
+
+  const globalCreateFile = async () => {
+    if (!globalFileCreatorData.fileName) {
+      setGlobalSnackbar({ open: true, message: 'Please enter a file name', severity: 'error' });
+      return;
+    }
+
+    try {
+      // Generate content if not provided
+      let content = globalFileCreatorData.content;
+      if (!content) {
+        content = await globalGenerateFileContent(globalFileCreatorData.fileName, globalFileCreatorData.fileType);
+      }
+
+      // Create the file resource
+      const newFile = {
+        id: Date.now() + Math.random(),
+        title: globalFileCreatorData.fileName,
+        url: `file://${globalFileCreatorData.fileName}`,
+        tags: [globalFileCreatorData.fileType],
+        notes: content,
+        platform: 'local',
+        folder: globalFileCreatorData.folder
+      };
+
+      // Add to resources
+      if (setResources) {
+        setResources(prev => [...prev, newFile]);
+      }
+
+      setGlobalSnackbar({ open: true, message: `Created ${globalFileCreatorData.fileName}`, severity: 'success' });
+      setShowGlobalFileCreator(false);
+      setGlobalFileCreatorData({ fileName: '', fileType: 'js', content: '', folder: activeFolder });
+
+      // Add success message
+      const successMessage = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: `✅ Created file: **${globalFileCreatorData.fileName}**
+
+The file has been added to your workspace. You can now edit it or use it in your project.`,
+        timestamp: new Date(),
+        type: 'file_created'
+      };
+      setGlobalChatMessages(prev => [...prev, successMessage]);
+
+    } catch (error) {
+      console.error('Error creating file:', error);
+      setGlobalSnackbar({ open: true, message: 'Error creating file', severity: 'error' });
+    }
+  };
+
+  const globalGenerateFileContent = async (fileName, fileType) => {
+    const prompt = `Generate appropriate content for a file named "${fileName}" with type "${fileType}". 
+    Create practical, runnable code or content that follows best practices.`;
+    
+    try {
+      return await llmIntegration.chatWithAI(prompt, []);
+    } catch (error) {
+      console.error('Error generating file content:', error);
+      return `// ${fileName}\n// Generated by AI Assistant\n\n// TODO: Add your code here`;
+    }
+  };
+
+  // Global AI GitHub integration functions
+  const globalHandleGitHubLogin = async () => {
+    try {
+      setGlobalIsGithubLoading(true);
+      const token = await initiateGitHubLogin();
+
+      const api = new GitHubAPI(token);
+      const userInfo = await api.getUserInfo();
+
+      setGlobalGithubToken(token);
+      setGlobalGithubUser(userInfo);
+      localStorage.setItem('github_token', token);
+
+      setGlobalSnackbar({ open: true, message: `GitHub connected successfully as @${userInfo.login}!`, severity: 'success' });
+    } catch (error) {
+      console.error('GitHub login error:', error);
+      setGlobalSnackbar({ open: true, message: 'GitHub login failed', severity: 'error' });
+      setGlobalGithubToken(null);
+      setGlobalGithubUser(null);
+      localStorage.removeItem('github_token');
+    } finally {
+      setGlobalIsGithubLoading(false);
+    }
+  };
+
+  const globalPushFilesToGitHub = async () => {
+    if (!globalGithubToken || !globalGithubUser) {
+      setGlobalSnackbar({
+        open: true,
+        message: 'Please connect to GitHub first.',
+        severity: 'error'
+      });
+      return;
+    }
+
+    if (globalLastCreatedFiles.length === 0) {
+      setGlobalSnackbar({ open: true, message: 'No files to push. Create some files first!', severity: 'error' });
+      return;
+    }
+
+    setShowGlobalGithubDialog(true);
+  };
+
+  const globalCreateGitHubRepository = async () => {
+    if (!globalGithubRepoName.trim()) {
+      setGlobalSnackbar({ open: true, message: 'Please enter a repository name', severity: 'error' });
+      return;
+    }
+
+    try {
+      setGlobalIsGithubLoading(true);
+      const api = new GitHubAPI(globalGithubToken);
+
+      // Create repository
+      const repoData = await api.createRepository(
+        sanitizeRepoName(globalGithubRepoName),
+        globalGithubRepoDescription,
+        globalIsPrivateRepo
+      );
+
+      // Convert files to GitHub format
+      const githubFiles = convertFilesToGitHubFormat(globalLastCreatedFiles);
+
+      // Push files to the repository
+      await api.pushMultipleFiles(
+        globalGithubUser.login,
+        repoData.name,
+        githubFiles,
+        `Initial commit: Added ${githubFiles.length} files`
+      );
+
+      setGlobalSnackbar({
+        open: true,
+        message: `Successfully created repository "${repoData.name}" and pushed ${githubFiles.length} files!`,
+        severity: 'success'
+      });
+
+      // Add success message
+      const successMessage = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: `🎉 **Repository Created Successfully!**
+
+📦 **Repository**: [${repoData.name}](${repoData.html_url})
+📁 **Files pushed**: ${githubFiles.length}
+🔗 **URL**: ${repoData.html_url}
+
+Your files have been successfully uploaded to GitHub!`,
+        timestamp: new Date(),
+        type: 'github_success'
+      };
+      setGlobalChatMessages(prev => [...prev, successMessage]);
+
+      // Reset dialog
+      setShowGlobalGithubDialog(false);
+      setGlobalGithubRepoName('');
+      setGlobalGithubRepoDescription('');
+      setGlobalIsPrivateRepo(false);
+
+    } catch (error) {
+      console.error('GitHub repository creation failed:', error);
+      setGlobalSnackbar({
+        open: true,
+        message: `Failed to create repository: ${error.message}`,
+        severity: 'error'
+      });
+    } finally {
+      setGlobalIsGithubLoading(false);
+    }
   };
 
   // --- Refresh workspaces from Supabase ---
@@ -2403,6 +2879,11 @@ useEffect(() => {
   // --- Other UI states ---
   const [activeFolder, setActiveFolder] = useState(ROOT_ID);
   const [expandedFolders, setExpandedFolders] = useState(new Set([ROOT_ID])); // Track which folders are expanded
+  
+  // Update global file creator folder when activeFolder changes
+  useEffect(() => {
+    setGlobalFileCreatorData(prev => ({ ...prev, folder: activeFolder }));
+  }, [activeFolder]);
   const blankForm = { title: "", url: "", tags: "", notes: "", platform: "", folder: activeFolder };
   // If searchScope is still used, restore it:
   const [searchScope, setSearchScope] = useState("everywhere");
@@ -4019,6 +4500,71 @@ useEffect(() => {
             )}
           </Box>
 
+          {/* Quick Actions */}
+          <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+              ⚡ Quick Actions
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<CreateIcon />}
+                onClick={() => setShowGlobalFileCreator(true)}
+              >
+                Create File
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<BuildIcon />}
+                onClick={() => setShowGlobalProjectGenerator(true)}
+              >
+                New Project
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<FolderIcon />}
+                onClick={() => {
+                  // Add folder functionality
+                  const name = prompt("Folder Name?");
+                  if (name && addFoldersAndResources) {
+                    const newFolder = {
+                      id: Date.now() + Math.random(),
+                      parent: activeFolder,
+                      text: name.trim(),
+                      droppable: true
+                    };
+                    addFoldersAndResources([newFolder], []);
+                  }
+                }}
+              >
+                New Folder
+              </Button>
+              {globalGithubUser ? (
+                <Tooltip title={`Connected as @${globalGithubUser.login}`}>
+                  <Chip
+                    label={`@${globalGithubUser.login}`}
+                    size="small"
+                    color="success"
+                    variant="outlined"
+                  />
+                </Tooltip>
+              ) : (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<GitHubIcon />}
+                  onClick={globalHandleGitHubLogin}
+                  disabled={globalIsGithubLoading}
+                >
+                  {globalIsGithubLoading ? 'Connecting...' : 'Connect GitHub'}
+                </Button>
+              )}
+            </Box>
+          </Box>
+
           {/* Chat Input */}
           <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
             <Box sx={{ display: 'flex', gap: 1 }}>
@@ -4028,7 +4574,7 @@ useEffect(() => {
                 maxRows={3}
                 value={globalChatInput}
                 onChange={(e) => setGlobalChatInput(e.target.value)}
-                placeholder="Ask me to help with code, docs, projects, or anything..."
+                placeholder="Ask me to create files, generate projects, edit docs, write code, or help with anything..."
                 onKeyPress={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -4049,6 +4595,176 @@ useEffect(() => {
           </Box>
         </Box>
       </Drawer>
+
+      {/* Global AI File Creator Dialog */}
+      <Dialog open={showGlobalFileCreator} onClose={() => setShowGlobalFileCreator(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Create New File</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              label="File Name"
+              value={globalFileCreatorData.fileName}
+              onChange={(e) => setGlobalFileCreatorData(prev => ({ ...prev, fileName: e.target.value }))}
+              placeholder="e.g., App.js, index.html, styles.css"
+            />
+            <TextField
+              select
+              label="File Type"
+              value={globalFileCreatorData.fileType}
+              onChange={(e) => setGlobalFileCreatorData(prev => ({ ...prev, fileType: e.target.value }))}
+              SelectProps={{ native: true }}
+            >
+              <option value="js">JavaScript (.js)</option>
+              <option value="ts">TypeScript (.ts)</option>
+              <option value="jsx">React JSX (.jsx)</option>
+              <option value="tsx">React TSX (.tsx)</option>
+              <option value="html">HTML (.html)</option>
+              <option value="css">CSS (.css)</option>
+              <option value="json">JSON (.json)</option>
+              <option value="md">Markdown (.md)</option>
+              <option value="py">Python (.py)</option>
+              <option value="java">Java (.java)</option>
+            </TextField>
+            <TextField
+              label="Content (optional - AI will generate if empty)"
+              multiline
+              rows={8}
+              value={globalFileCreatorData.content}
+              onChange={(e) => setGlobalFileCreatorData(prev => ({ ...prev, content: e.target.value }))}
+              placeholder="Leave empty for AI-generated content..."
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowGlobalFileCreator(false)}>Cancel</Button>
+          <Button onClick={globalCreateFile} variant="contained" startIcon={<CreateIcon />}>
+            Create File
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Global AI Project Generator Dialog */}
+      <Dialog open={showGlobalProjectGenerator} onClose={() => setShowGlobalProjectGenerator(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Generate Project Structure</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              label="Project Name"
+              value={globalProjectData.projectName}
+              onChange={(e) => setGlobalProjectData(prev => ({ ...prev, projectName: e.target.value }))}
+              placeholder="e.g., my-react-app, todo-api, portfolio-site"
+            />
+            <TextField
+              select
+              label="Project Type"
+              value={globalProjectData.projectType}
+              onChange={(e) => setGlobalProjectData(prev => ({ ...prev, projectType: e.target.value }))}
+              SelectProps={{ native: true }}
+            >
+              <option value="web-app">Web Application</option>
+              <option value="react-app">React Application</option>
+              <option value="node-api">Node.js API</option>
+              <option value="python-app">Python Application</option>
+              <option value="mobile-app">Mobile Application</option>
+              <option value="desktop-app">Desktop Application</option>
+            </TextField>
+            <TextField
+              label="Description"
+              multiline
+              rows={3}
+              value={globalProjectData.description}
+              onChange={(e) => setGlobalProjectData(prev => ({ ...prev, description: e.target.value }))}
+              placeholder="Describe your project..."
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowGlobalProjectGenerator(false)}>Cancel</Button>
+          <Button 
+            onClick={() => {
+              const projectIntent = {
+                type: 'create_multiple_files',
+                content: `Create a ${globalProjectData.projectType} project called "${globalProjectData.projectName}". ${globalProjectData.description}`
+              };
+              globalHandleMultipleFileCreation(projectIntent);
+              setShowGlobalProjectGenerator(false);
+            }}
+            variant="contained" 
+            startIcon={<BuildIcon />}
+            disabled={isGlobalChatLoading}
+          >
+            {isGlobalChatLoading ? 'Generating...' : 'Generate Project'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Global AI GitHub Repository Creation Dialog */}
+      <Dialog open={showGlobalGithubDialog} onClose={() => setShowGlobalGithubDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          📤 Push to GitHub Repository
+          {globalGithubUser && (
+            <Typography variant="body2" color="textSecondary">
+              Logged in as @{globalGithubUser.login}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              label="Repository Name"
+              value={globalGithubRepoName}
+              onChange={(e) => setGlobalGithubRepoName(e.target.value)}
+              placeholder="my-awesome-project"
+              fullWidth
+            />
+            <TextField
+              label="Description (optional)"
+              value={globalGithubRepoDescription}
+              onChange={(e) => setGlobalGithubRepoDescription(e.target.value)}
+              placeholder="Generated by AI Assistant"
+              multiline
+              rows={2}
+              fullWidth
+            />
+            <FormControl>
+              <FormLabel component="legend">Repository Visibility</FormLabel>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <input
+                  type="checkbox"
+                  checked={globalIsPrivateRepo}
+                  onChange={(e) => setGlobalIsPrivateRepo(e.target.checked)}
+                />
+                <Typography variant="body2">Make repository private</Typography>
+              </Box>
+            </FormControl>
+            <Typography variant="body2" color="textSecondary">
+              This will create a new repository and push {globalLastCreatedFiles.length} files to it.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowGlobalGithubDialog(false)}>Cancel</Button>
+          <Button
+            onClick={globalCreateGitHubRepository}
+            variant="contained"
+            disabled={globalIsGithubLoading || !globalGithubRepoName.trim()}
+            startIcon={globalIsGithubLoading ? <CircularProgress size={16} /> : <GitHubIcon />}
+          >
+            {globalIsGithubLoading ? 'Creating...' : 'Create & Push'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Global AI Snackbar for notifications */}
+      <Snackbar
+        open={globalSnackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setGlobalSnackbar({ ...globalSnackbar, open: false })}
+      >
+        <Alert severity={globalSnackbar.severity} onClose={() => setGlobalSnackbar({ ...globalSnackbar, open: false })}>
+          {globalSnackbar.message}
+        </Alert>
+      </Snackbar>
 
       {/* Google Docs Action Alert */}
       <Snackbar
