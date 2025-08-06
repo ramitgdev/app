@@ -19,8 +19,8 @@ import PersonIcon from '@mui/icons-material/Person';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
 
-const WebIDE = () => {
-  const [code, setCode] = useState(`// Welcome to the Web IDE!
+const WebIDE = ({ selectedFile, onFileChange }) => {
+  const defaultCode = `// Welcome to the Web IDE!
 // Start coding here...
 
 function helloWorld() {
@@ -39,13 +39,42 @@ function calculator(a, b, operation) {
   }
 }
 
-helloWorld();`);
+helloWorld();`;
+
+  const [code, setCode] = useState(defaultCode);
   
   const [language, setLanguage] = useState('javascript');
   const [output, setOutput] = useState('');
 
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [fileName, setFileName] = useState('untitled.js');
+
+  // Load selected file content
+  useEffect(() => {
+    if (selectedFile) {
+      setCode(selectedFile.notes || defaultCode);
+      setFileName(selectedFile.title || 'untitled.js');
+      
+      // Set language based on file extension
+      const extension = selectedFile.title?.split('.').pop()?.toLowerCase();
+      const languageMap = {
+        'js': 'javascript',
+        'jsx': 'javascript',
+        'ts': 'typescript',
+        'tsx': 'typescript',
+        'py': 'python',
+        'html': 'html',
+        'css': 'css',
+        'json': 'json',
+        'md': 'markdown'
+      };
+      setLanguage(languageMap[extension] || 'javascript');
+    } else {
+      setCode(defaultCode);
+      setFileName('untitled.js');
+      setLanguage('javascript');
+    }
+  }, [selectedFile, defaultCode]);
   const [showAlert, setShowAlert] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
   const editorRef = useRef(null);
@@ -129,6 +158,12 @@ helloWorld();`);
           <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <CodeIcon color="primary" />
             Web IDE
+            {selectedFile && (
+              <>
+                <span style={{ margin: '0 8px' }}>•</span>
+                <span style={{ fontWeight: 'normal', color: '#666' }}>{fileName}</span>
+              </>
+            )}
           </Typography>
           
           <Box sx={{ display: 'flex', gap: 1 }}>
@@ -177,7 +212,13 @@ helloWorld();`);
             height="60vh"
             language={language}
             value={code}
-            onChange={setCode}
+            onChange={(value) => {
+          setCode(value);
+          // Update the file content in the parent component
+          if (onFileChange && selectedFile) {
+            onFileChange(value);
+          }
+        }}
             onMount={handleEditorDidMount}
             options={{
               minimap: { enabled: false },

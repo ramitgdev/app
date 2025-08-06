@@ -78,6 +78,7 @@ import WebIDE from './WebIDE';
 
 import OpenAITest from './OpenAITest';
 import AdvancedAIOrchestrator from './AdvancedAIOrchestrator';
+import EnhancedAIAssistant from './EnhancedAIAssistant';
 
 // Use the modern theme
 const theme = modernTheme;
@@ -1868,6 +1869,8 @@ export default function App() {
   
   // Sidebar interface state
   const [sidebarApp, setSidebarApp] = useState(null);
+  // Enhanced AI Assistant state
+  const [showEnhancedAI, setShowEnhancedAI] = useState(false);
 
   // New AI features state
   const [showAdvancedAI, setShowAdvancedAI] = useState(false);
@@ -2751,6 +2754,9 @@ useEffect(() => {
                     editResource(childFile);
                   }
                 } else {
+                  // Open local files in Web IDE
+                  setSelectedResource(childFile);
+                  setActiveDevelopmentTab('web-ide');
                   editResource(childFile);
                 }
               }} title="Click to edit">
@@ -3076,10 +3082,30 @@ useEffect(() => {
                   icon={<SmartToyIcon sx={{ color: 'secondary.main' }} />}
                   color="secondary"
                 >
-                  <AICodeReviewer 
-                    workspaceId={selectedWksp.id} 
-                    currentUser={user}
-                  />
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {/* Enhanced AI Assistant Button */}
+                    <Button
+                      variant="contained"
+                      startIcon={<SmartToyIcon />}
+                      onClick={() => setShowEnhancedAI(true)}
+                      sx={{
+                        bgcolor: 'primary.main',
+                        '&:hover': { bgcolor: 'primary.dark' },
+                        mb: 2
+                      }}
+                    >
+                      🚀 Enhanced AI Assistant
+                    </Button>
+                    
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Create files, generate projects, and manage your workspace with AI
+                    </Typography>
+                    
+                    <AICodeReviewer 
+                      workspaceId={selectedWksp.id} 
+                      currentUser={user}
+                    />
+                  </Box>
                 </CollapsibleSection>
 
                 {/* Resources Section */}
@@ -3459,7 +3485,15 @@ useEffect(() => {
                       </Card>
                       
                       <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden', height: '70vh' }}>
-                        <WebIDE />
+                        <WebIDE 
+                          selectedFile={selectedResource}
+                          onFileChange={(updatedContent) => {
+                            if (selectedResource) {
+                              const updatedFile = { ...selectedResource, notes: updatedContent };
+                              setResources(prev => prev.map(r => r.id === selectedResource.id ? updatedFile : r));
+                            }
+                          }}
+                        />
                       </Card>
                     </Box>
                   )}
@@ -3889,7 +3923,26 @@ useEffect(() => {
         </Box>
       )}
 
-      {/* Sidebar Application Interface */}
+      {/* Enhanced AI Assistant */}
+      {showEnhancedAI && (
+        <EnhancedAIAssistant
+          onClose={() => setShowEnhancedAI(false)}
+          workspaceId={selectedWksp?.id}
+          folders={folders}
+          resources={resources}
+          addFoldersAndResources={addFoldersAndResources}
+          addChildFolder={addChildFolder}
+          renameFolder={renameFolder}
+          deleteFolder={deleteFolder}
+          removeResource={removeResource}
+          editResource={editResource}
+          activeFolder={activeFolder}
+          setActiveFolder={setActiveFolder}
+          setResources={setResources}
+        />
+      )}
+
+      {/* Legacy Sidebar Application Interface */}
       {sidebarApp && (
         <SidebarAppInterface
           appType={sidebarApp}
