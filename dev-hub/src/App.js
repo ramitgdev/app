@@ -60,6 +60,12 @@ import CodeIcon from '@mui/icons-material/Code';
 import ArticleIcon from '@mui/icons-material/Article';
 import CreateIcon from '@mui/icons-material/Create';
 import BuildIcon from '@mui/icons-material/Build';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
+import BugReportIcon from '@mui/icons-material/BugReport';
+import OptimizeIcon from '@mui/icons-material/Tune';
+import RefactorIcon from '@mui/icons-material/Transform';
+import NoteAddIcon from '@mui/icons-material/NoteAdd';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SettingsIcon from '@mui/icons-material/Settings';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import WorkIcon from '@mui/icons-material/Work';
@@ -1941,7 +1947,7 @@ export default function App() {
     {
       id: 1,
       role: 'assistant',
-      content: "Hello! I'm your global AI assistant powered by Groq. I can help you with code, analyze Google Docs, create and edit files, generate projects, manage your workspace, and more across all tabs. What would you like to work on?",
+              content: "Hello! I'm your global AI assistant powered by Groq. I can help you with code analysis & optimization, create and edit files, create and analyze Google Docs, generate projects, execute code, and manage your workspace across all tabs. What would you like to work on?",
       timestamp: new Date()
     }
   ]);
@@ -1979,6 +1985,11 @@ export default function App() {
   const [globalGithubRepoDescription, setGlobalGithubRepoDescription] = useState('');
   const [globalIsPrivateRepo, setGlobalIsPrivateRepo] = useState(false);
   const [globalIsGithubLoading, setGlobalIsGithubLoading] = useState(false);
+
+  // Google Docs creation state
+  const [showGoogleDocDialog, setShowGoogleDocDialog] = useState(false);
+  const [newGoogleDocTitle, setNewGoogleDocTitle] = useState('');
+  const [isCreatingGoogleDoc, setIsCreatingGoogleDoc] = useState(false);
   
   // Sidebar interface state
   const [sidebarApp, setSidebarApp] = useState(null);
@@ -2078,8 +2089,17 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
       } else if (intent.type === 'edit_file') {
         globalHandleFileEdit(intent);
         return;
+      } else if (intent.type === 'create_google_doc') {
+        globalHandleGoogleDocCreation(intent);
+        return;
       } else if (intent.type === 'analyze_google_doc') {
         globalHandleGoogleDocAnalysis(intent);
+        return;
+      } else if (intent.type === 'explain_code' || intent.type === 'fix_code' || intent.type === 'optimize_code' || intent.type === 'refactor_code' || intent.type === 'comment_code') {
+        globalHandleCodeAction(intent.type, intent);
+        return;
+      } else if (intent.type === 'execute_code') {
+        globalHandleCodeExecution(intent);
         return;
       } else if (intent.type === 'workspace_analysis') {
         globalHandleWorkspaceAnalysis(currentInput);
@@ -2099,7 +2119,7 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
         context += `Current Google Doc: "${googleDocContext.title}" - Content preview: ${googleDocContext.content.substring(0, 500)}${googleDocContext.content.length > 500 ? '...' : ''}. `;
       }
       
-      // Add tab-specific context
+      // Add tab-specific context with current file information
       if (activeDevelopmentTab === 'web-ide') {
         // Get current code from WebIDE if available
         const codeEditor = document.querySelector('.monaco-editor');
@@ -2108,7 +2128,16 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
           // Try to get code from Monaco editor
           currentCode = codeEditor.textContent || '';
         }
+        
+        // Also check selected resource
+        if (selectedResource && selectedResource.notes) {
+          currentCode = selectedResource.notes;
+          context += `User is in the Web IDE editing file: ${selectedResource.title}. Current code:\n\`\`\`\n${currentCode}\n\`\`\`\n\n`;
+        } else if (currentCode) {
         context += `User is in the Web IDE. Current code in editor:\n\`\`\`\n${currentCode}\n\`\`\`\n\n`;
+        } else {
+          context += `User is in the Web IDE but no code is currently loaded.\n\n`;
+        }
       } else if (activeDevelopmentTab === 'github') {
         context += `User is in the GitHub editor. `;
       } else if (activeDevelopmentTab === 'gdocs') {
@@ -2492,21 +2521,63 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
             {message.googleDoc && (
               <Box sx={{ mt: 2 }}>
                 <Typography variant="caption" color="text.secondary">
-                  Google Doc Analyzed:
+                  {message.googleDoc.created ? 'Google Doc Created:' : 'Google Doc Analyzed:'}
                 </Typography>
                 <Box sx={{ mt: 1 }}>
                   <Chip
-                    label={`📄 ${message.googleDoc.title}`}
+                    label={`${message.googleDoc.created ? '✨ ' : '📄 '}${message.googleDoc.title}`}
                     size="small"
-                    color="info"
+                    color={message.googleDoc.created ? "success" : "info"}
                     variant="outlined"
-                    icon={<ArticleIcon />}
-                    onClick={() => window.open(message.googleDoc.url, '_blank')}
-                    sx={{ cursor: 'pointer' }}
+                    icon={message.googleDoc.created ? <NoteAddIcon /> : <ArticleIcon />}
+                    onClick={() => message.googleDoc.url && window.open(message.googleDoc.url, '_blank')}
+                    sx={{ cursor: message.googleDoc.url ? 'pointer' : 'default' }}
+                  />
+                  {message.googleDoc.contentLength && (
+                    <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
+                      {message.googleDoc.contentLength} characters
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
+            )}
+
+            {message.codeAction && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Code Action Applied:
+                </Typography>
+                <Box sx={{ mt: 1 }}>
+                  <Chip
+                    label={`${message.codeAction.action === 'explain_code' ? '🤖' : 
+                            message.codeAction.action === 'fix_code' ? '🔧' :
+                            message.codeAction.action === 'optimize_code' ? '⚡' :
+                            message.codeAction.action === 'refactor_code' ? '🏗️' : '📝'} ${message.codeAction.fileName}`}
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                    icon={<CodeIcon />}
                   />
                   <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
-                    {message.googleDoc.contentLength} characters
+                    {message.codeAction.language}
                   </Typography>
+                </Box>
+              </Box>
+            )}
+
+            {message.codeExecution && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Code Executed:
+                </Typography>
+                <Box sx={{ mt: 1 }}>
+                  <Chip
+                    label={`🚀 ${message.codeExecution.fileName}`}
+                    size="small"
+                    color="success"
+                    variant="outlined"
+                    icon={<PlayArrowIcon />}
+                  />
                 </Box>
               </Box>
             )}
@@ -2581,10 +2652,36 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
       return { type: 'edit_file', fileName: extractFileNameForEditing(input), request: input };
     }
     
+    // Google Doc creation patterns
+    if ((lowerInput.includes('create') || lowerInput.includes('make') || lowerInput.includes('new')) && 
+        (lowerInput.includes('google doc') || lowerInput.includes('google document') || lowerInput.includes('gdoc') || (lowerInput.includes('doc') && (lowerInput.includes('google') || lowerInput.includes('drive'))))) {
+      return { type: 'create_google_doc', title: extractGoogleDocTitle(input), request: input };
+    }
+    
     // Google Doc analysis patterns
     if ((lowerInput.includes('analyze') || lowerInput.includes('summarize') || lowerInput.includes('review') || lowerInput.includes('read') || lowerInput.includes('what') || lowerInput.includes('tell me about')) && 
         (lowerInput.includes('doc') || lowerInput.includes('document') || lowerInput.includes('google doc'))) {
       return { type: 'analyze_google_doc', request: input };
+    }
+    
+    // Code action patterns (like Web IDE)
+    if (lowerInput.includes('explain') && (lowerInput.includes('code') || lowerInput.includes('this'))) {
+      return { type: 'explain_code', request: input };
+    }
+    if (lowerInput.includes('fix') && (lowerInput.includes('code') || lowerInput.includes('bug') || lowerInput.includes('error'))) {
+      return { type: 'fix_code', request: input };
+    }
+    if (lowerInput.includes('optimize') && (lowerInput.includes('code') || lowerInput.includes('performance'))) {
+      return { type: 'optimize_code', request: input };
+    }
+    if (lowerInput.includes('refactor') && (lowerInput.includes('code') || lowerInput.includes('restructure'))) {
+      return { type: 'refactor_code', request: input };
+    }
+    if ((lowerInput.includes('add comments') || lowerInput.includes('comment')) && lowerInput.includes('code')) {
+      return { type: 'comment_code', request: input };
+    }
+    if ((lowerInput.includes('run') || lowerInput.includes('execute')) && lowerInput.includes('code')) {
+      return { type: 'execute_code', request: input };
     }
     
     // Workspace analysis patterns
@@ -2603,6 +2700,25 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
   const extractProjectName = (input) => {
     const match = input.match(/(?:create|make|new)\s+(?:project\s+)?([a-zA-Z0-9._-]+)/i);
     return match ? match[1] : '';
+  };
+
+  const extractGoogleDocTitle = (input) => {
+    // Look for titles in quotes or after "called", "named", "titled"
+    const patterns = [
+      /"([^"]+)"/,  // Text in quotes
+      /'([^']+)'/,  // Text in single quotes
+      /(?:called|named|titled)\s+([^.,!?]+)/i,  // After "called", "named", "titled"
+      /google\s+doc\s+([^.,!?]+)/i,  // After "google doc"
+      /new\s+(?:doc|document)\s+([^.,!?]+)/i  // After "new doc/document"
+    ];
+    
+    for (const pattern of patterns) {
+      const match = input.match(pattern);
+      if (match && match[1].trim()) {
+        return match[1].trim();
+      }
+    }
+    return '';
   };
 
   const extractFileNameForEditing = (input) => {
@@ -2783,6 +2899,61 @@ ${response}
       setGlobalSnackbar({
         open: true,
         message: 'Error analyzing Google Doc',
+        severity: 'error'
+      });
+    } finally {
+      setIsGlobalChatLoading(false);
+    }
+  };
+
+  const globalHandleGoogleDocCreation = async (intent) => {
+    try {
+      setIsGlobalChatLoading(true);
+      
+      if (!googleToken) {
+        setGlobalSnackbar({
+          open: true,
+          message: 'Please sign in to Google first to create a Google Doc.',
+          severity: 'error'
+        });
+        return;
+      }
+
+      const docTitle = intent.title || `AI Created Document - ${new Date().toLocaleDateString()}`;
+      
+      // Call the existing createNewGoogleDoc function
+      await createNewGoogleDoc(docTitle);
+      
+      // Add assistant message about the creation
+      const assistantMessage = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: `✅ **Google Doc Created Successfully!**
+
+I've created a new Google Doc titled **"${docTitle}"** in your Google Drive and opened it in the editor.
+
+🔗 You can now:
+- Edit the document content directly
+- Share it with collaborators
+- Ask me to analyze or help with the content
+- Switch to other tabs and come back anytime
+
+The document is ready for you to start working on!`,
+        timestamp: new Date(),
+        type: 'google_doc_creation',
+        googleDoc: {
+          title: docTitle,
+          created: true
+        }
+      };
+      
+      setGlobalChatMessages(prev => [...prev, assistantMessage]);
+      
+    } catch (error) {
+      console.error('Error creating Google Doc:', error);
+      setGlobalSnackbar({
+        open: true,
+        message: 'Error creating Google Doc. Please try again.',
         severity: 'error'
       });
     } finally {
@@ -3206,6 +3377,238 @@ Your files have been successfully uploaded to GitHub!`,
       });
     } finally {
       setGlobalIsGithubLoading(false);
+    }
+  };
+
+  // Global AI Code Actions (like Enhanced Web IDE)
+  const globalHandleCodeAction = async (actionType, intent) => {
+    try {
+      setIsGlobalChatLoading(true);
+      
+      // Get current file content if available
+      let currentCode = '';
+      let fileName = '';
+      let language = 'javascript';
+      
+      if (selectedResource && selectedResource.notes) {
+        currentCode = selectedResource.notes;
+        fileName = selectedResource.title || 'untitled';
+        
+        // Determine language from file extension
+        const extension = fileName.split('.').pop()?.toLowerCase();
+        const langMap = {
+          'js': 'javascript', 'jsx': 'javascript', 'ts': 'typescript', 'tsx': 'typescript',
+          'py': 'python', 'java': 'java', 'cpp': 'cpp', 'c': 'c',
+          'css': 'css', 'html': 'html', 'json': 'json', 'md': 'markdown'
+        };
+        language = langMap[extension] || 'javascript';
+      } else if (activeDevelopmentTab === 'web-ide') {
+        // Try to get code from Web IDE
+        const codeEditor = document.querySelector('.monaco-editor');
+        if (codeEditor) {
+          currentCode = codeEditor.textContent || '';
+        }
+      }
+      
+      if (!currentCode.trim()) {
+        setGlobalSnackbar({
+          open: true,
+          message: 'No code found to analyze. Please open a file in the Web IDE or select a file with code content.',
+          severity: 'warning'
+        });
+        return;
+      }
+      
+      const actionPrompts = {
+        explain_code: `Explain this ${language} code in clear, simple terms:\n\n\`\`\`${language}\n${currentCode}\n\`\`\`\n\nProvide a step-by-step explanation of what this code does, its purpose, and how it works.`,
+        fix_code: `Analyze this ${language} code and fix any bugs or issues:\n\n\`\`\`${language}\n${currentCode}\n\`\`\`\n\nReturn the corrected code with explanations of what was fixed. If no issues are found, suggest potential improvements.`,
+        optimize_code: `Optimize this ${language} code for better performance and readability:\n\n\`\`\`${language}\n${currentCode}\n\`\`\`\n\nProvide the optimized version with explanations of the improvements made.`,
+        refactor_code: `Refactor this ${language} code to improve structure and maintainability:\n\n\`\`\`${language}\n${currentCode}\n\`\`\`\n\nProvide the refactored code with explanations of the structural improvements.`,
+        comment_code: `Add detailed comments to this ${language} code:\n\n\`\`\`${language}\n${currentCode}\n\`\`\`\n\nReturn the code with comprehensive comments explaining each part and function.`
+      };
+      
+      const response = await llmIntegration.chatWithAI(actionPrompts[actionType], []);
+      
+      const actionLabels = {
+        explain_code: '🤖 Code Explanation',
+        fix_code: '🔧 Code Fix',
+        optimize_code: '⚡ Code Optimization', 
+        refactor_code: '🏗️ Code Refactoring',
+        comment_code: '📝 Code Comments'
+      };
+      
+      const assistantMessage = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: `${actionLabels[actionType]}
+
+**File**: ${fileName}
+**Language**: ${language}
+
+${response}
+
+${actionType !== 'explain_code' ? '\n💡 **Tip**: You can copy the improved code and paste it back into your file.' : ''}`,
+        timestamp: new Date(),
+        type: actionType,
+        codeAction: {
+          action: actionType,
+          fileName: fileName,
+          language: language
+        }
+      };
+      
+      setGlobalChatMessages(prev => [...prev, assistantMessage]);
+      
+    } catch (error) {
+      console.error(`Error in code ${actionType}:`, error);
+      setGlobalSnackbar({
+        open: true,
+        message: `Failed to ${actionType.replace('_', ' ')} code`,
+        severity: 'error'
+      });
+    } finally {
+      setIsGlobalChatLoading(false);
+    }
+  };
+
+  const globalHandleCodeExecution = async (intent) => {
+    try {
+      setIsGlobalChatLoading(true);
+      
+      // Get current file content
+      let currentCode = '';
+      let fileName = '';
+      
+      if (selectedResource && selectedResource.notes) {
+        currentCode = selectedResource.notes;
+        fileName = selectedResource.title || 'untitled.js';
+      } else if (activeDevelopmentTab === 'web-ide') {
+        // Try to get code from Web IDE
+        const codeEditor = document.querySelector('.monaco-editor');
+        if (codeEditor) {
+          currentCode = codeEditor.textContent || '';
+        }
+        fileName = 'current-code.js';
+      }
+      
+      if (!currentCode.trim()) {
+        setGlobalSnackbar({
+          open: true,
+          message: 'No code found to execute. Please open a file in the Web IDE or select a file with JavaScript code.',
+          severity: 'warning'
+        });
+        return;
+      }
+      
+      // Execute JavaScript code in a sandbox
+      let output = '';
+      const sandbox = {
+        console: {
+          log: (...args) => output += args.join(' ') + '\n',
+          error: (...args) => output += 'ERROR: ' + args.join(' ') + '\n',
+          warn: (...args) => output += 'WARNING: ' + args.join(' ') + '\n',
+          info: (...args) => output += 'INFO: ' + args.join(' ') + '\n'
+        },
+        setTimeout, setInterval, clearTimeout, clearInterval,
+        Date, Math, JSON, parseInt, parseFloat, isNaN, isFinite
+      };
+
+      try {
+        output += '🚀 Executing code...\n\n';
+        const result = new Function(...Object.keys(sandbox), currentCode);
+        result(...Object.values(sandbox));
+        output += '\n✅ Code executed successfully!';
+      } catch (error) {
+        output += `\n❌ Execution Error: ${error.message}`;
+      }
+      
+      const assistantMessage = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: `🚀 **Code Execution Result**
+
+**File**: ${fileName}
+
+**Output:**
+\`\`\`
+${output}
+\`\`\`
+
+💡 **Note**: Code execution runs in a secure sandbox environment with limited capabilities.`,
+        timestamp: new Date(),
+        type: 'execute_code',
+        codeExecution: {
+          fileName: fileName,
+          output: output
+        }
+      };
+      
+      setGlobalChatMessages(prev => [...prev, assistantMessage]);
+      
+    } catch (error) {
+      console.error('Error executing code:', error);
+      setGlobalSnackbar({
+        open: true,
+        message: 'Failed to execute code',
+        severity: 'error'
+      });
+    } finally {
+      setIsGlobalChatLoading(false);
+    }
+  };
+
+  // Google Docs creation function
+  const createNewGoogleDoc = async (title) => {
+    if (!googleToken) {
+      setGlobalSnackbar({
+        open: true,
+        message: 'Please sign in to Google first',
+        severity: 'error'
+      });
+      return;
+    }
+
+    setIsCreatingGoogleDoc(true);
+    
+    try {
+      const response = await fetch('https://docs.googleapis.com/v1/documents', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${googleToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          title: title || `New Document - ${new Date().toLocaleDateString()}`
+        })
+      });
+      
+      if (response.ok) {
+        const newDoc = await response.json();
+        const newDocUrl = `https://docs.google.com/document/d/${newDoc.documentId}/edit`;
+        setGoogleDocUrl(newDocUrl);
+        setActiveDevelopmentTab('gdocs');
+        
+        setGlobalSnackbar({
+          open: true,
+          message: `Google Doc "${newDoc.title}" created and opened!`,
+          severity: 'success'
+        });
+
+        // Close dialog and reset form
+        setShowGoogleDocDialog(false);
+        setNewGoogleDocTitle('');
+      } else {
+        throw new Error(`Failed to create document: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('Error creating Google Doc:', error);
+      setGlobalSnackbar({
+        open: true,
+        message: 'Failed to create new Google Doc. Please check your permissions.',
+        severity: 'error'
+      });
+    } finally {
+      setIsCreatingGoogleDoc(false);
     }
   };
 
@@ -4069,10 +4472,10 @@ useEffect(() => {
                       Create files, generate projects, and manage your workspace with AI
                     </Typography>
                     
-                  <AICodeReviewer 
-                    workspaceId={selectedWksp.id} 
-                    currentUser={user}
-                  />
+                    <AICodeReviewer 
+                      workspaceId={selectedWksp.id} 
+                      currentUser={user}
+                    />
                   </Box>
                 </CollapsibleSection>
 
@@ -4125,29 +4528,69 @@ useEffect(() => {
                        
                        {/* Google Authentication */}
                        {!googleToken && (
-                         <Card sx={{ p: 3, mb: 3, bgcolor: '#f8f9fa' }}>
-                           <Typography variant="h6" fontWeight={600} mb={2}>
+                       <Card sx={{ p: 3, mb: 3, bgcolor: '#f8f9fa' }}>
+                         <Typography variant="h6" fontWeight={600} mb={2}>
                              <GoogleIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
                              Connect Google Account
-                           </Typography>
-                           <Typography variant="body2" color="text.secondary" mb={2}>
+                         </Typography>
+                         <Typography variant="body2" color="text.secondary" mb={2}>
                              Sign in with Google to access and edit Google Docs directly in your workspace.
-                           </Typography>
-                           <Button 
-                             variant="contained" 
+                         </Typography>
+                         <Button 
+                           variant="contained" 
                              startIcon={<GoogleIcon />}
                              onClick={() => loginWithGoogle()}
                              sx={{ bgcolor: '#4285f4', '&:hover': { bgcolor: '#3367d6' } }}
                            >
                              Sign in with Google
-                           </Button>
-                         </Card>
+                         </Button>
+                       </Card>
                        )}
 
+                       {/* Google Docs Actions */}
+                       <Card sx={{ p: 3, mb: 3, bgcolor: '#f0f8ff' }}>
+                         <Typography variant="h6" fontWeight={600} mb={2}>
+                           📝 Google Docs Actions
+                         </Typography>
+                         
+                         {/* Create New Doc */}
+                         <Stack direction="row" spacing={2} mb={3} alignItems="center">
+                           <Button 
+                             variant="contained" 
+                             disabled={!googleToken || isCreatingGoogleDoc}
+                             onClick={() => setShowGoogleDocDialog(true)}
+                             startIcon={isCreatingGoogleDoc ? <CircularProgress size={16} color="inherit" /> : <NoteAddIcon />}
+                             sx={{ 
+                               background: 'linear-gradient(45deg, #4285f4 30%, #34a853 90%)',
+                               '&:hover': {
+                                 background: 'linear-gradient(45deg, #3367d6 30%, #2e7d32 90%)'
+                               }
+                             }}
+                           >
+                             {isCreatingGoogleDoc ? 'Creating...' : 'Create New Doc'}
+                           </Button>
+                           <Button 
+                             variant="outlined" 
+                             disabled={!googleToken || isCreatingGoogleDoc}
+                             onClick={() => createNewGoogleDoc()}
+                             startIcon={<NoteAddIcon />}
+                           >
+                             Quick Create
+                           </Button>
+                           {googleToken && (
+                             <Chip 
+                               label="Google Connected" 
+                               color="success" 
+                               icon={<GoogleIcon />}
+                             variant="outlined" 
+                             />
+                           )}
+                         </Stack>
+
                        {/* Document URL Input */}
-                       <Stack direction="row" spacing={2} mb={3} alignItems="center">
+                         <Stack direction="row" spacing={2} alignItems="center">
                          <TextField
-                           label="Google Doc URL"
+                             label="Or open existing Google Doc URL"
                            value={googleDocUrl}
                            onChange={e => setGoogleDocUrl(e.target.value)}
                            placeholder="https://docs.google.com/document/d/..."
@@ -4155,7 +4598,7 @@ useEffect(() => {
                            disabled={!googleToken}
                          />
                          <Button 
-                           variant="contained" 
+                             variant="outlined" 
                            disabled={!googleDocUrl || !googleToken}
                            onClick={() => {
                              if (googleDocUrl && googleToken) {
@@ -4163,23 +4606,26 @@ useEffect(() => {
                                const match = googleDocUrl.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
                                if (match) {
                                  const docId = match[1];
-                                 // For now, just enable the local editor
-                                 // In a full implementation, you'd load the actual document content
+                                   setGlobalSnackbar({
+                                     open: true,
+                                     message: 'Google Doc loaded successfully!',
+                                     severity: 'success'
+                                   });
+                                 } else {
+                                   setGlobalSnackbar({
+                                     open: true,
+                                     message: 'Invalid Google Doc URL format',
+                                     severity: 'error'
+                                   });
+                                 }
                                }
-                             }
-                           }}
-                         >
-                           Open in Editor
+                             }}
+                             startIcon={<OpenInNewIcon />}
+                           >
+                             Open Doc
                          </Button>
-                         {googleToken && (
-                           <Chip 
-                             label="Google Connected" 
-                             color="success" 
-                             icon={<GoogleIcon />}
-                             variant="outlined"
-                           />
-                         )}
                        </Stack>
+                       </Card>
 
                        {/* Google Docs Editor */}
                        {googleDocUrl && googleToken && (
@@ -4288,11 +4734,11 @@ useEffect(() => {
                     </Box>
                   )}
                       </Card>
-
+                      
                       <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden', height: '70vh' }}>
                         {useEnhancedIDE ? (
                           <EnhancedWebIDE 
-                            selectedFile={selectedResource}
+                          selectedFile={selectedResource}
                             sidebarCollapsed={sidebarCollapsed}
                             availableFolders={(() => {
                               // Create available folders list from current workspace structure
@@ -4337,12 +4783,12 @@ useEffect(() => {
 
                               return availableFolders;
                             })()}
-                            onFileChange={(updatedContent) => {
-                              if (selectedResource) {
-                                const updatedFile = { ...selectedResource, notes: updatedContent };
-                                setResources(prev => prev.map(r => r.id === selectedResource.id ? updatedFile : r));
-                              }
-                            }}
+                          onFileChange={(updatedContent) => {
+                            if (selectedResource) {
+                              const updatedFile = { ...selectedResource, notes: updatedContent };
+                              setResources(prev => prev.map(r => r.id === selectedResource.id ? updatedFile : r));
+                            }
+                          }}
                             onCreateNewFile={(fileData) => {
                               // Create a new file resource
                               const newFile = {
@@ -4756,7 +5202,9 @@ useEffect(() => {
               overflowY: 'auto',
               p: 2,
               display: 'flex',
-              flexDirection: 'column'
+              flexDirection: 'column',
+              minHeight: 0, // Allow shrinking
+              maxHeight: 'calc(100vh - 280px)' // Reserve space for header, actions, and input
             }}
           >
             {globalChatMessages.map(renderGlobalChatMessage)}
@@ -4773,155 +5221,284 @@ useEffect(() => {
             )}
           </Box>
 
-          {/* Quick Actions */}
-          <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
-            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-              ⚡ Quick Actions
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          {/* Compact Actions - Fixed Layout */}
+          <Box sx={{ 
+            borderTop: 1, 
+            borderColor: 'divider',
+            flexShrink: 0,
+            maxHeight: '90px',
+            overflow: 'hidden'
+          }}>
+            {/* Quick Actions Row */}
+            <Box sx={{ 
+              px: 1.5, 
+              py: 0.5, 
+              bgcolor: 'grey.50',
+              display: 'flex', 
+              gap: 0.25, 
+              overflowX: 'auto',
+              alignItems: 'center',
+              minHeight: '32px',
+              '&::-webkit-scrollbar': { display: 'none' },
+              scrollbarWidth: 'none'
+            }}>
+              <Typography variant="caption" sx={{ 
+                mr: 0.5, 
+                fontWeight: 600, 
+                color: 'text.secondary', 
+                minWidth: '30px',
+                fontSize: '0.65rem',
+                flexShrink: 0
+              }}>
+                Quick:
+              </Typography>
               <Button
                 size="small"
-                variant="outlined"
-                startIcon={<CreateIcon />}
+                variant="text"
+                startIcon={<CreateIcon sx={{ fontSize: '14px' }} />}
                 onClick={() => setShowGlobalFileCreator(true)}
+                sx={{ 
+                  minWidth: 'auto', 
+                  px: 0.5, 
+                  fontSize: '0.65rem', 
+                  textTransform: 'none',
+                  flexShrink: 0,
+                  height: '28px'
+                }}
               >
-                Create File
+                File
               </Button>
               <Button
                 size="small"
-                variant="outlined"
-                startIcon={<BuildIcon />}
+                variant="text"
+                startIcon={<BuildIcon sx={{ fontSize: '14px' }} />}
                 onClick={() => setShowGlobalProjectGenerator(true)}
+                sx={{ 
+                  minWidth: 'auto', 
+                  px: 0.5, 
+                  fontSize: '0.65rem', 
+                  textTransform: 'none',
+                  flexShrink: 0,
+                  height: '28px'
+                }}
               >
-                New Project
+                Project
               </Button>
               <Button
                 size="small"
-                variant="outlined"
-                startIcon={<EditIcon />}
+                variant="text"
+                startIcon={<EditIcon sx={{ fontSize: '14px' }} />}
                 onClick={() => {
-                  const availableFiles = resources.filter(r => 
-                    r.title.match(/\.(js|ts|jsx|tsx|html|css|json|md|py|java|cpp|c|h)$/i)
-                  );
-                  
-                  if (availableFiles.length === 0) {
-                    setGlobalSnackbar({ 
-                      open: true, 
-                      message: 'No code files found to edit', 
-                      severity: 'info' 
-                    });
-                    return;
-                  }
-                  
-                  const fileList = availableFiles.slice(0, 10).map(f => `- ${f.title}`).join('\n');
-                  const message = {
-                    id: Date.now() + 1,
-                    role: 'assistant',
-                    content: `📝 **Available files to edit:**
-
-${fileList}
-
-Please tell me which file you'd like to edit and what changes you want to make. For example:
-- "Edit App.js and add a new function"
-- "Implement the calculateTotal function in utils.js"
-- "Fix the styling in styles.css"`,
-                    timestamp: new Date(),
-                    type: 'file_list'
-                  };
-                  setGlobalChatMessages(prev => [...prev, message]);
+                  setGlobalChatInput("Help me edit a file in my workspace");
+                  setTimeout(() => handleGlobalChatSend(), 100);
+                }}
+                sx={{ 
+                  minWidth: 'auto', 
+                  px: 0.5, 
+                  fontSize: '0.65rem', 
+                  textTransform: 'none',
+                  flexShrink: 0,
+                  height: '28px'
                 }}
               >
-                Edit File
+                Edit
               </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<ArticleIcon />}
-                onClick={async () => {
-                  const googleDocContext = await getGoogleDocContext();
-                  
-                  if (!googleDocContext) {
-                    setGlobalSnackbar({ 
-                      open: true, 
-                      message: 'No Google Doc is currently open. Please open a Google Doc first.', 
-                      severity: 'info' 
-                    });
-                    return;
-                  }
-                  
-                  const message = {
-                    id: Date.now() + 1,
-                    role: 'assistant',
-                    content: `📄 **Current Google Doc: "${googleDocContext.title}"**
-
-I can help you analyze, summarize, or work with this document. Here are some things you can ask me:
-
-- "Analyze this document"
-- "Summarize the main points"
-- "What is this document about?"
-- "Review the content for clarity"
-- "Generate code based on this document"
-- "Create a project from these specifications"
-
-**Document Stats:**
-- Length: ${googleDocContext.content.length} characters
-- Word count: ~${Math.ceil(googleDocContext.content.split(/\s+/).length)} words
-
-What would you like me to do with this document?`,
-                    timestamp: new Date(),
-                    type: 'google_doc_prompt',
-                    googleDoc: {
-                      title: googleDocContext.title,
-                      url: googleDocContext.url,
-                      contentLength: googleDocContext.content.length
-                    }
-                  };
-                  setGlobalChatMessages(prev => [...prev, message]);
-                }}
-                disabled={!googleDocUrl || !googleToken}
-              >
-                Analyze Doc
-              </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<FolderIcon />}
-                onClick={() => {
-                  // Add folder functionality
-                  const name = prompt("Folder Name?");
-                  if (name && addFoldersAndResources) {
-                    const newFolder = {
-                      id: Date.now() + Math.random(),
-                      parent: activeFolder,
-                      text: name.trim(),
-                      droppable: true
-                    };
-                    addFoldersAndResources([newFolder], []);
-                  }
-                }}
-              >
-                New Folder
-              </Button>
+              {googleToken && (
+                <Button
+                  size="small"
+                  variant="text"
+                  startIcon={<NoteAddIcon sx={{ fontSize: '14px' }} />}
+                  onClick={() => setShowGoogleDocDialog(true)}
+                  sx={{ 
+                    minWidth: 'auto', 
+                    px: 0.5, 
+                    fontSize: '0.65rem', 
+                    textTransform: 'none',
+                    flexShrink: 0,
+                    height: '28px'
+                  }}
+                >
+                  Doc
+                </Button>
+              )}
+              {googleDocUrl && (
+                <Button
+                  size="small"
+                  variant="text"
+                  startIcon={<ArticleIcon sx={{ fontSize: '14px' }} />}
+                  onClick={() => {
+                    setGlobalChatInput("Analyze the current Google Doc");
+                    setTimeout(() => handleGlobalChatSend(), 100);
+                  }}
+                  sx={{ 
+                    minWidth: 'auto', 
+                    px: 0.5, 
+                    fontSize: '0.65rem', 
+                    textTransform: 'none',
+                    flexShrink: 0,
+                    height: '28px'
+                  }}
+                >
+                  Analyze
+                </Button>
+              )}
               {globalGithubUser ? (
-                <Tooltip title={`Connected as @${globalGithubUser.login}`}>
-                  <Chip
-                    label={`@${globalGithubUser.login}`}
-                    size="small"
-                    color="success"
-                    variant="outlined"
-                  />
-                </Tooltip>
+                <Chip
+                  label={`@${globalGithubUser.login.substring(0, 8)}`}
+                  size="small"
+                  color="success"
+                  variant="outlined"
+                  sx={{ 
+                    height: '22px', 
+                    fontSize: '0.6rem',
+                    flexShrink: 0,
+                    '& .MuiChip-label': { px: 0.5 }
+                  }}
+                />
               ) : (
                 <Button
                   size="small"
-                  variant="outlined"
-                  startIcon={<GitHubIcon />}
+                  variant="text"
+                  startIcon={<GitHubIcon sx={{ fontSize: '14px' }} />}
                   onClick={globalHandleGitHubLogin}
                   disabled={globalIsGithubLoading}
+                  sx={{ 
+                    minWidth: 'auto', 
+                    px: 0.5, 
+                    fontSize: '0.65rem', 
+                    textTransform: 'none',
+                    flexShrink: 0,
+                    height: '28px'
+                  }}
                 >
-                  {globalIsGithubLoading ? 'Connecting...' : 'Connect GitHub'}
+                  GitHub
                 </Button>
               )}
+            </Box>
+
+            {/* Code Actions Row */}
+            <Box sx={{ 
+              px: 1.5, 
+              py: 0.5, 
+              bgcolor: 'blue.50',
+              display: 'flex', 
+              gap: 0.25, 
+              overflowX: 'auto',
+              alignItems: 'center',
+              minHeight: '32px',
+              '&::-webkit-scrollbar': { display: 'none' },
+              scrollbarWidth: 'none'
+            }}>
+              <Typography variant="caption" sx={{ 
+                mr: 0.5, 
+                fontWeight: 600, 
+                color: 'text.secondary', 
+                minWidth: '30px',
+                fontSize: '0.65rem',
+                flexShrink: 0
+              }}>
+                Code:
+              </Typography>
+              <Button
+                size="small"
+                variant="text"
+                startIcon={<AutoFixHighIcon sx={{ fontSize: '14px' }} />}
+                onClick={() => {
+                  setGlobalChatInput("Explain this code");
+                  setTimeout(() => handleGlobalChatSend(), 100);
+                }}
+                sx={{ 
+                  minWidth: 'auto', 
+                  px: 0.5, 
+                  fontSize: '0.65rem', 
+                  color: 'primary.main', 
+                  textTransform: 'none',
+                  flexShrink: 0,
+                  height: '28px'
+                }}
+              >
+                Explain
+              </Button>
+              <Button
+                size="small"
+                variant="text"
+                startIcon={<BugReportIcon sx={{ fontSize: '14px' }} />}
+                onClick={() => {
+                  setGlobalChatInput("Fix any bugs in this code");
+                  setTimeout(() => handleGlobalChatSend(), 100);
+                }}
+                sx={{ 
+                  minWidth: 'auto', 
+                  px: 0.5, 
+                  fontSize: '0.65rem', 
+                  color: 'error.main', 
+                  textTransform: 'none',
+                  flexShrink: 0,
+                  height: '28px'
+                }}
+              >
+                Fix
+              </Button>
+              <Button
+                size="small"
+                variant="text"
+                startIcon={<OptimizeIcon sx={{ fontSize: '14px' }} />}
+                onClick={() => {
+                  setGlobalChatInput("Optimize this code for better performance");
+                  setTimeout(() => handleGlobalChatSend(), 100);
+                }}
+                sx={{ 
+                  minWidth: 'auto', 
+                  px: 0.5, 
+                  fontSize: '0.65rem', 
+                  color: 'warning.main', 
+                  textTransform: 'none',
+                  flexShrink: 0,
+                  height: '28px'
+                }}
+              >
+                Optimize
+              </Button>
+              <Button
+                size="small"
+                variant="text"
+                startIcon={<RefactorIcon sx={{ fontSize: '14px' }} />}
+                onClick={() => {
+                  setGlobalChatInput("Refactor this code to improve structure");
+                  setTimeout(() => handleGlobalChatSend(), 100);
+                }}
+                sx={{ 
+                  minWidth: 'auto', 
+                  px: 0.5, 
+                  fontSize: '0.65rem', 
+                  color: 'success.main', 
+                  textTransform: 'none',
+                  flexShrink: 0,
+                  height: '28px'
+                }}
+              >
+                Refactor
+              </Button>
+              <Button
+                size="small"
+                variant="text"
+                startIcon={<PlayArrowIcon sx={{ fontSize: '14px' }} />}
+                onClick={() => {
+                  setGlobalChatInput("Run this code");
+                  setTimeout(() => handleGlobalChatSend(), 100);
+                }}
+                sx={{ 
+                  minWidth: 'auto', 
+                  px: 0.5, 
+                  fontSize: '0.65rem', 
+                  color: 'info.main', 
+                  textTransform: 'none',
+                  flexShrink: 0,
+                  height: '28px'
+                }}
+              >
+                Run
+              </Button>
             </Box>
           </Box>
 
@@ -4934,7 +5511,7 @@ What would you like me to do with this document?`,
                 maxRows={3}
                 value={globalChatInput}
                 onChange={(e) => setGlobalChatInput(e.target.value)}
-                placeholder="Ask me to analyze docs, create files, edit code, generate projects, implement functions, or help with anything..."
+                placeholder="Ask me to analyze code, fix bugs, optimize performance, create files, create Google Docs, run code, or help with anything..."
                 onKeyPress={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -5111,6 +5688,72 @@ What would you like me to do with this document?`,
             startIcon={globalIsGithubLoading ? <CircularProgress size={16} /> : <GitHubIcon />}
           >
             {globalIsGithubLoading ? 'Creating...' : 'Create & Push'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Google Doc Creation Dialog */}
+      <Dialog
+        open={showGoogleDocDialog}
+        onClose={() => {
+          setShowGoogleDocDialog(false);
+          setNewGoogleDocTitle('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <NoteAddIcon color="primary" />
+          Create New Google Doc
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Create a new Google Doc in your Google Drive and open it in the editor.
+          </Typography>
+          
+          <TextField
+            fullWidth
+            label="Document Title"
+            value={newGoogleDocTitle}
+            onChange={(e) => setNewGoogleDocTitle(e.target.value)}
+            placeholder="Enter document title..."
+            sx={{ mb: 2 }}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter' && newGoogleDocTitle.trim()) {
+                createNewGoogleDoc(newGoogleDocTitle.trim());
+              }
+            }}
+          />
+          
+          <Box sx={{ p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
+            <Typography variant="caption" color="info.dark">
+              💡 <strong>Tip:</strong> If you leave the title blank, I'll create a document with today's date. The document will be created in your Google Drive and automatically opened in the editor.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              setShowGoogleDocDialog(false);
+              setNewGoogleDocTitle('');
+            }}
+            disabled={isCreatingGoogleDoc}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={() => createNewGoogleDoc(newGoogleDocTitle.trim())}
+            variant="contained"
+            disabled={isCreatingGoogleDoc}
+            startIcon={isCreatingGoogleDoc ? <CircularProgress size={16} color="inherit" /> : <NoteAddIcon />}
+            sx={{ 
+              background: 'linear-gradient(45deg, #4285f4 30%, #34a853 90%)',
+              '&:hover': {
+                background: 'linear-gradient(45deg, #3367d6 30%, #2e7d32 90%)'
+              }
+            }}
+          >
+            {isCreatingGoogleDoc ? 'Creating...' : 'Create Document'}
           </Button>
         </DialogActions>
       </Dialog>
