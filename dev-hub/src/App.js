@@ -58,11 +58,8 @@ import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import BrushIcon from '@mui/icons-material/Brush';
 import CodeIcon from '@mui/icons-material/Code';
 import ArticleIcon from '@mui/icons-material/Article';
-import Star from '@mui/icons-material/Star';
-import Build from '@mui/icons-material/Build';
 import CreateIcon from '@mui/icons-material/Create';
 import BuildIcon from '@mui/icons-material/Build';
-import CloudUpload from '@mui/icons-material/CloudUpload';
 import SettingsIcon from '@mui/icons-material/Settings';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import WorkIcon from '@mui/icons-material/Work';
@@ -76,14 +73,14 @@ import { GitHubAPI, sanitizeRepoName, convertFilesToGitHubFormat, validateGitHub
 import GoogleSlidesEditor from './GoogleSlidesEditor';
 import FlowchartEditor from './FlowchartEditor';
 import CanvaEditor from './CanvaEditor';
-import HackathonAssistant from './HackathonAssistant';
+
 import { llmIntegration } from './llm-integration';
 import ChatGPTInterface from './ChatGPTInterface';
 import WebIDE from './WebIDE';
 import EnhancedWebIDE from './EnhancedWebIDE';
 
-import OpenAITest from './OpenAITest';
-import AdvancedAIOrchestrator from './AdvancedAIOrchestrator';
+
+
 import EnhancedAIAssistant from './EnhancedAIAssistant';
 
 // Use the modern theme
@@ -839,7 +836,7 @@ function isGoogleDocResource(ref) {
 }
 
 function isGitHubResource(ref) {
-  return typeof ref.url === "string" && ref.url.includes("github.com") && ref.url.includes("/blob/");
+  return typeof ref.url === "string" && ref.url.includes("github.com");
 }
 
 function isGoogleSlidesResource(ref) {
@@ -862,18 +859,48 @@ function isLucidchartResource(ref) {
 }
 
 function extractGitHubInfo(url) {
-  // Extract owner/repo and file path from GitHub URL
-  // Example: https://github.com/owner/repo/blob/main/src/file.js
-  const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)\/blob\/([^\/]+)\/(.+)/);
-  if (match) {
-    const [, owner, repo, branch, filePath] = match;
-    return {
-      repoFullName: `${owner}/${repo}`,
-      filePath: filePath,
-      branch: branch
-    };
+  try {
+    // Handle various GitHub URL formats
+    const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)\/blob\/([^\/]+)\/(.+)/);
+    if (match) {
+      return {
+        owner: match[1],
+        repo: match[2],
+        branch: match[3],
+        filePath: match[4],
+        repoFullName: `${match[1]}/${match[2]}`
+      };
+    }
+    
+    // Handle raw.githubusercontent.com URLs
+    const rawMatch = url.match(/raw\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/([^\/]+)\/(.+)/);
+    if (rawMatch) {
+      return {
+        owner: rawMatch[1],
+        repo: rawMatch[2],
+        branch: rawMatch[3],
+        filePath: rawMatch[4],
+        repoFullName: `${rawMatch[1]}/${rawMatch[2]}`
+      };
+    }
+    
+    // Handle api.github.com URLs
+    const apiMatch = url.match(/api\.github\.com\/repos\/([^\/]+)\/([^\/]+)\/contents\/(.+)/);
+    if (apiMatch) {
+      return {
+        owner: apiMatch[1],
+        repo: apiMatch[2],
+        branch: 'main', // Default branch
+        filePath: apiMatch[3],
+        repoFullName: `${apiMatch[1]}/${apiMatch[2]}`
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error extracting GitHub info:', error);
+    return null;
   }
-  return null;
 }
 // import { useState, useEffect } from "react";
 /*function GoogleDocEditor({ docUrl, googleToken, fetchGoogleDoc, insertTextGoogleDoc }) {
@@ -1850,6 +1877,9 @@ What specific aspect of your ${appType} project would you like to discuss?`;
   );
 }
 
+// ---- GitHub Helper Functions ----
+// (extractGitHubInfo function is defined above at line 861)
+
 // ---- Main App ----
 export default function App() {
   const user = useSupabaseAuthUser();
@@ -1902,7 +1932,7 @@ export default function App() {
   const [searchTabScope, setSearchTabScope] = useState('everywhere'); // 'everywhere' or 'folder'
 
   // Hackathon assistant state
-  const [showHackathonAssistant, setShowHackathonAssistant] = useState(false);
+
   const [currentEditor, setCurrentEditor] = useState(null);
 
   // Global AI Assistant state
@@ -3609,26 +3639,70 @@ useEffect(() => {
           <>
             {/* Render child files */}
             {childFiles.map(childFile => (
-              <Box key={childFile.id} className="mui-resource" sx={{ ml: (depth + 1) * 2, display: 'flex', alignItems: 'center', cursor: 'grab', px: 1, py: 0.5, bgcolor: '#fff7de', border: '1px dotted #eee' }} onClick={() => {
+              <Box key={childFile.id} className="mui-resource" sx={{ ml: (depth + 1) * 2, display: 'flex', alignItems: 'center', cursor: 'grab', px: 1, py: 0.5, bgcolor: '#fff7de', border: '1px dotted #eee' }} onClick={async () => {
                 // Check if it's a Google Doc and open in editor
                 if (isGoogleDocResource(childFile)) {
                   setGoogleDocUrl(childFile.url);
                   setActiveDevelopmentTab('gdocs');
                 } else if (isGitHubResource(childFile)) {
-                  // Extract GitHub info and open in GitHub editor
+                  // Open GitHub files in Web IDE with GitHub integration
                   const githubInfo = extractGitHubInfo(childFile.url);
                   if (githubInfo) {
-                    setGithubRepo(githubInfo.repoFullName);
-                    setGithubFile(githubInfo.filePath);
-                    setActiveDevelopmentTab('github');
+                    // Create a GitHub-aware resource for the Web IDE
+                    const githubResource = {
+                      ...childFile,
+                      isGitHubFile: true,
+                      githubInfo: githubInfo,
+                      title: githubInfo.filePath.split('/').pop() || childFile.title,
+                      platform: 'github'
+                    };
+                    
+                    // Try to fetch the file content from GitHub
+                    try {
+                      const response = await fetch(`https://api.github.com/repos/${githubInfo.repoFullName}/contents/${githubInfo.filePath}`, {
+                        headers: globalGithubToken ? {
+                          'Authorization': `token ${globalGithubToken}`
+                        } : {}
+                      });
+                      
+                      if (response.ok) {
+                        const data = await response.json();
+                        
+                        // GitHub API returns base64 encoded content for files
+                        if (data.content && data.encoding === 'base64') {
+                          const content = atob(data.content.replace(/\s/g, ''));
+                          githubResource.notes = content;
+                          githubResource.originalContent = content; // Store original for comparison
+                        } else if (data.download_url) {
+                          // Fallback: fetch from download_url for raw content
+                          const rawResponse = await fetch(data.download_url);
+                          if (rawResponse.ok) {
+                            const content = await rawResponse.text();
+                            githubResource.notes = content;
+                            githubResource.originalContent = content;
+                          }
+                        } else {
+                          githubResource.notes = `// Could not decode content from GitHub\n// Repository: ${githubInfo.repoFullName}\n// File: ${githubInfo.filePath}\n// Response type: ${data.type}`;
+                        }
+                      } else {
+                        githubResource.notes = `// Could not fetch content from GitHub\n// Repository: ${githubInfo.repoFullName}\n// File: ${githubInfo.filePath}\n// Please check your GitHub token or repository access.`;
+                      }
+                    } catch (error) {
+                      console.error('Error fetching GitHub file:', error);
+                      githubResource.notes = `// Error fetching content from GitHub\n// Repository: ${githubInfo.repoFullName}\n// File: ${githubInfo.filePath}\n// Error: ${error.message}`;
+                    }
+                    
+                    setSelectedResource(githubResource);
+                    setActiveDevelopmentTab('web-ide');
                   } else {
-                    editResource(childFile);
+                    // Fallback if GitHub info extraction fails
+                    setSelectedResource(childFile);
+                    setActiveDevelopmentTab('web-ide');
                   }
                 } else {
                   // Open local files in Web IDE
                   setSelectedResource(childFile);
                   setActiveDevelopmentTab('web-ide');
-                  editResource(childFile);
                 }
               }} title="Click to edit">
                 <Box sx={{ width: 20, mr: 0.5 }} />
@@ -3755,9 +3829,7 @@ useEffect(() => {
           </Typography>
           <Tabs value={mainTab} onChange={(_, v) => setMainTab(v)} indicatorColor="primary" textColor="primary">
             <Tab label="Workspaces" />
-            <Tab icon={<GitHubIcon />} label="GitHub Editor" />
             <Tab icon={<CloudUploadIcon />} label="Marketplace" />
-            <Tab icon={<SmartToyIcon />} label="OpenAI Test" />
           </Tabs>
         </Toolbar>
       </AppBar>
@@ -4036,12 +4108,9 @@ useEffect(() => {
                 {/* Development Tabs */}
                 <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#fff' }}>
                   <Tabs value={activeDevelopmentTab} onChange={(_, v) => setActiveDevelopmentTab(v)}>
-                    <Tab label="GitHub Editor" value="github" />
                     <Tab label="Google Docs" value="gdocs" />
                     <Tab label="AI Assistant" value="ai-assistant" />
-                    <Tab label="Advanced AI" value="advanced-ai" />
                     <Tab label="Web IDE" value="web-ide" />
-                    <Tab label="Hackathon AI" value="hackathon" />
                     <Tab label="Resources" value="resources" />
                     <Tab label="Search" value="search" />
                     <Tab label="Import" value="import" />
@@ -4050,131 +4119,6 @@ useEffect(() => {
 
                 {/* Development Content */}
                 <Box sx={{ flex: 1, p: 3, overflowY: 'auto', bgcolor: '#fff' }}>
-                                     {activeDevelopmentTab === 'github' && (
-                     <Box>
-                       <Typography variant="h5" fontWeight={700} mb={3}>GitHub Development</Typography>
-                       
-                       {/* GitHub Authentication */}
-                       <Card sx={{ p: 3, mb: 3, bgcolor: '#f8f9fa' }}>
-                         <Typography variant="h6" fontWeight={600} mb={2}>
-                           <GitHubIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                           GitHub Integration
-                         </Typography>
-                         <Typography variant="body2" color="text.secondary" mb={2}>
-                           Connect your GitHub account to edit files directly in your workspace.
-                         </Typography>
-                         <Button 
-                           variant="contained" 
-                           startIcon={<GitHubIcon />}
-                           onClick={async () => {
-                             try {
-                               const token = await initiateGitHubLogin();
-                               setGithubToken(token);
-                               alert('GitHub connected successfully!');
-                             } catch (error) {
-                               console.error('GitHub OAuth error:', error);
-                               alert('GitHub connection failed. Please try again or check your OAuth setup.');
-                             }
-                           }}
-                           sx={{ bgcolor: '#24292e', '&:hover': { bgcolor: '#1b1f23' } }}
-                         >
-                           {githubToken ? 'GitHub Connected' : 'Connect GitHub'}
-                         </Button>
-                       </Card>
-
-                       {/* Repository and File Selection */}
-                       <Card sx={{ p: 3, mb: 3 }}>
-                         <Typography variant="h6" fontWeight={600} mb={2}>
-                           File Editor
-                         </Typography>
-                         <Stack direction="row" spacing={2} mb={3} alignItems="center">
-                           <TextField
-                             label="Repository (owner/repo)"
-                             value={githubRepo}
-                             onChange={e => setGithubRepo(e.target.value)}
-                             placeholder="e.g. vercel/next.js"
-                             sx={{ width: 300 }}
-                           />
-                           <TextField
-                             label="File Path"
-                             value={githubFile}
-                             onChange={e => setGithubFile(e.target.value)}
-                             placeholder="src/App.js"
-                             sx={{ width: 300 }}
-                           />
-                           <Button 
-                             variant="contained" 
-                             disabled={!githubRepo || !githubFile}
-                             onClick={() => {
-                               if (githubRepo && githubFile) {
-                                 // Enable local editor
-                               }
-                             }}
-                           >
-                             Open in Editor
-                           </Button>
-                         </Stack>
-                         
-                         {githubRepo && githubFile && (
-                           <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
-                             <LocalGitHubEditor 
-                               repoFullName={githubRepo} 
-                               filePath={githubFile} 
-                               githubToken={githubToken}
-                               onExit={() => {
-                                 setGithubRepo('');
-                                 setGithubFile('');
-                                 setActiveDevelopmentTab('github');
-                               }}
-                             />
-                           </Card>
-                         )}
-                       </Card>
-
-                       {/* Quick Actions */}
-                       <Card sx={{ p: 3, bgcolor: '#f0f8ff' }}>
-                         <Typography variant="h6" fontWeight={600} mb={2}>
-                           Quick Actions
-                         </Typography>
-                         <Stack direction="row" spacing={2}>
-                           <Button 
-                             variant="outlined" 
-                             startIcon={<AddIcon />}
-                             onClick={() => {
-                               setGithubRepo('new-repo');
-                               setGithubFile('README.md');
-                               alert('New repository created! You can now start editing in the local editor.');
-                             }}
-                           >
-                             Create New Repository
-                           </Button>
-                           <Button 
-                             variant="outlined" 
-                             startIcon={<InsertDriveFileIcon />}
-                             onClick={() => {
-                               if (!githubRepo) {
-                                 alert('Please enter a repository first, then create a new file.');
-                                 return;
-                               }
-                               setGithubFile('new-file.js');
-                               alert('New file created! You can now start editing in the local editor.');
-                             }}
-                           >
-                             Create New File
-                           </Button>
-                           <Button 
-                             variant="outlined" 
-                             startIcon={<FolderIcon />}
-                             onClick={() => {
-                               window.open('https://github.com', '_blank');
-                             }}
-                           >
-                             Open GitHub
-                           </Button>
-                         </Stack>
-                       </Card>
-                     </Box>
-                   )}
 
                                      {activeDevelopmentTab === 'gdocs' && (
                      <Box>
@@ -4318,62 +4262,7 @@ useEffect(() => {
                     </Box>
                   )}
 
-                  {activeDevelopmentTab === 'advanced-ai' && (
-                    <Box>
-                      <Typography variant="h5" fontWeight={700} mb={3}>
-                                                 <Star sx={{ mr: 1, verticalAlign: 'middle' }} />
-                        Advanced AI Orchestrator
-                      </Typography>
-                      
-                      <Card sx={{ p: 3, mb: 3, bgcolor: '#f0f8ff' }}>
-                        <Typography variant="h6" fontWeight={600} mb={2}>
-                                                     <Build sx={{ mr: 1, verticalAlign: 'middle' }} />
-                          Cross-Platform AI Development
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" mb={3}>
-                          Generate production-ready code from Google Docs specifications. Create web, mobile, desktop, and API applications with AI assistance.
-                        </Typography>
-                        
-                        <Grid container spacing={2}>
-                          <Grid item xs={12} md={6}>
-                            <Card sx={{ p: 2, bgcolor: '#fff' }}>
-                              <Typography variant="subtitle1" fontWeight={600} mb={1}>
-                                <CodeIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                                Code Generation
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                Extract commands from documents and generate cross-platform code
-                              </Typography>
-                            </Card>
-                          </Grid>
-                          <Grid item xs={12} md={6}>
-                            <Card sx={{ p: 2, bgcolor: '#fff' }}>
-                              <Typography variant="subtitle1" fontWeight={600} mb={1}>
-                                <CloudUpload sx={{ mr: 1, verticalAlign: 'middle' }} />
-                                Deployment Ready
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                Generate deployment configurations and CI/CD pipelines
-                              </Typography>
-                            </Card>
-                          </Grid>
-                        </Grid>
-                      </Card>
-                      
-                      <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden', height: '70vh' }}>
-                        <AdvancedAIOrchestrator 
-                          googleToken={googleToken}
-                          onCodeGenerated={(code) => {
-                            setCrossPlatformCode(code);
-                            console.log('Generated cross-platform code:', code);
-                          }}
-                          onError={(error) => {
-                            console.error('AI Orchestrator error:', error);
-                          }}
-                        />
-                      </Card>
-                    </Box>
-                  )}
+
 
                   {activeDevelopmentTab === 'web-ide' && (
                     <Box>
@@ -4462,103 +4351,6 @@ useEffect(() => {
                     </Box>
                   )}
 
-                  {activeDevelopmentTab === 'hackathon' && (
-                    <Box>
-                      <Typography variant="h5" fontWeight={700} mb={3}>Hackathon AI Assistant</Typography>
-                      <Card sx={{ p: 3, mb: 3, bgcolor: '#f0f8ff' }}>
-                        <Typography variant="h6" fontWeight={600} mb={2}>
-                          <SmartToyIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                          AI-Powered Hackathon Workspace
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" mb={3}>
-                          From idea to implementation - let AI help you build your hackathon project step by step.
-                        </Typography>
-                        <Button 
-                          variant="contained" 
-                          startIcon={<SmartToyIcon />}
-                          onClick={() => {
-                            console.log('Launch Hackathon Assistant clicked');
-                            setShowHackathonAssistant(true);
-                          }}
-                          sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}
-                        >
-                          Launch Hackathon Assistant
-                        </Button>
-                      </Card>
-
-                      {/* Quick Access to Individual Tools */}
-                      <Grid container spacing={3}>
-                        <Grid item xs={12} md={6} lg={4}>
-                          <Card sx={{ p: 3, height: '100%' }}>
-                            <Stack direction="row" alignItems="center" spacing={1} mb={2}>
-                              <AccountTreeIcon color="primary" />
-                              <Typography variant="h6" fontWeight={600}>Flowchart Creator</Typography>
-                            </Stack>
-                            <Typography variant="body2" color="text.secondary" mb={2}>
-                              Create system flowcharts and diagrams for your project architecture.
-                            </Typography>
-                            <Button 
-                              variant="outlined" 
-                              startIcon={<AddIcon />}
-                              onClick={() => {
-                                console.log('Flowchart button clicked');
-                                window.open('https://www.lucidchart.com/documents#/create', '_blank');
-                              }}
-                              fullWidth
-                            >
-                              Create Flowchart
-                            </Button>
-                          </Card>
-                        </Grid>
-
-                        <Grid item xs={12} md={6} lg={4}>
-                          <Card sx={{ p: 3, height: '100%' }}>
-                            <Stack direction="row" alignItems="center" spacing={1} mb={2}>
-                              <SlideshowIcon color="primary" />
-                              <Typography variant="h6" fontWeight={600}>Presentation Builder</Typography>
-                            </Stack>
-                            <Typography variant="body2" color="text.secondary" mb={2}>
-                              Generate compelling presentation slides for your project pitch.
-                            </Typography>
-                            <Button 
-                              variant="outlined" 
-                              startIcon={<AddIcon />}
-                              onClick={() => {
-                                console.log('Slides button clicked');
-                                window.open('https://docs.google.com/presentation/create', '_blank');
-                              }}
-                              fullWidth
-                            >
-                              Create Slides
-                            </Button>
-                          </Card>
-                        </Grid>
-
-                        <Grid item xs={12} md={6} lg={4}>
-                          <Card sx={{ p: 3, height: '100%' }}>
-                            <Stack direction="row" alignItems="center" spacing={1} mb={2}>
-                              <BrushIcon color="primary" />
-                              <Typography variant="h6" fontWeight={600}>Design Creator</Typography>
-                            </Stack>
-                            <Typography variant="body2" color="text.secondary" mb={2}>
-                              Create visual designs and mockups for your application.
-                            </Typography>
-                            <Button 
-                              variant="outlined" 
-                              startIcon={<AddIcon />}
-                              onClick={() => {
-                                console.log('Canva button clicked');
-                                window.open('https://www.canva.com/create', '_blank');
-                              }}
-                              fullWidth
-                            >
-                              Create Design
-                            </Button>
-                          </Card>
-                        </Grid>
-                      </Grid>
-                    </Box>
-                  )}
 
                   {activeDevelopmentTab === 'resources' && (
                     <Box>
@@ -4769,9 +4561,7 @@ useEffect(() => {
           )}
         </DndProvider>
       )}
-      {mainTab === 1 && <GitHubWorkspacePanel />}
-      {mainTab === 2 && <MarketplacePanel currentUser={user} />}
-      {mainTab === 3 && <OpenAITest />}
+      {mainTab === 1 && <MarketplacePanel currentUser={user} />}
 
       {/* Editor Rendering */}
       {currentEditor === 'flowchart' && (
@@ -4845,47 +4635,6 @@ useEffect(() => {
         </Box>
       )}
 
-      {/* Hackathon Assistant Dialog */}
-      {showHackathonAssistant && (
-        <Box sx={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 9999,
-          backgroundColor: 'white'
-        }}>
-          <HackathonAssistant
-            onGenerateProject={(project) => {
-              console.log('Generated project:', project);
-              setShowHackathonAssistant(false);
-            }}
-            onGenerateFlowchart={(flowchart) => {
-              console.log('Opening Flowchart Editor');
-              setEditorData(flowchart);
-              setCurrentEditor('flowchart');
-              setShowHackathonAssistant(false);
-            }}
-            onGenerateDesign={(design) => {
-              console.log('Opening Canva Editor');
-              setEditorData(design);
-              setCurrentEditor('canva');
-              setShowHackathonAssistant(false);
-            }}
-            onGenerateSlides={(slides) => {
-              console.log('Opening Slides Editor');
-              setEditorData(slides);
-              setCurrentEditor('slides');
-              setShowHackathonAssistant(false);
-            }}
-            onGenerateCode={(code) => {
-              console.log('Generated code:', code);
-              setShowHackathonAssistant(false);
-            }}
-          />
-        </Box>
-      )}
 
       {/* Enhanced AI Assistant */}
       {showEnhancedAI && (

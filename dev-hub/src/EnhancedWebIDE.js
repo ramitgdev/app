@@ -34,6 +34,7 @@ import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import SpeedIcon from '@mui/icons-material/Speed';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
+import GitHubIcon from '@mui/icons-material/GitHub';
 
 const EnhancedWebIDE = ({ selectedFile, onFileChange, sidebarCollapsed = false }) => {
   const defaultCode = `// Welcome to the Enhanced AI-Powered Web IDE!
@@ -128,23 +129,88 @@ console.log("\\n🎉 Code execution completed!");`;
   const [alertSeverity, setAlertSeverity] = useState('success');
   const [isFullscreen, setIsFullscreen] = useState(false);
   
+  // GitHub integration state
+  const [isGitHubFile, setIsGitHubFile] = useState(false);
+  const [githubInfo, setGithubInfo] = useState(null);
+  const [originalContent, setOriginalContent] = useState('');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isPushingToGitHub, setIsPushingToGitHub] = useState(false);
+  
   // Refs
   const editorRef = useRef(null);
   const chatEndRef = useRef(null);
   const chatScrollRef = useRef(null);
   
-  // Initialize with welcome message
+  // Handle selectedFile changes (including GitHub files)
   useEffect(() => {
-    setChatMessages([{
-      id: Date.now(),
-      role: 'assistant',
-      content: `🚀 **Welcome to Enhanced AI IDE!**
+    if (selectedFile) {
+      // Check if it's a GitHub file
+      if (selectedFile.isGitHubFile && selectedFile.githubInfo) {
+        setIsGitHubFile(true);
+        setGithubInfo(selectedFile.githubInfo);
+        setOriginalContent(selectedFile.originalContent || '');
+        setCode(selectedFile.notes || '');
+        setFileName(selectedFile.title || selectedFile.githubInfo.filePath.split('/').pop());
+        
+        // Determine language from file extension
+        const extension = selectedFile.title ? selectedFile.title.split('.').pop() : selectedFile.githubInfo.filePath.split('.').pop();
+        const langMap = {
+          'js': 'javascript',
+          'jsx': 'javascript', 
+          'ts': 'typescript',
+          'tsx': 'typescript',
+          'py': 'python',
+          'java': 'java',
+          'cpp': 'cpp',
+          'c': 'c',
+          'css': 'css',
+          'html': 'html',
+          'json': 'json',
+          'md': 'markdown'
+        };
+        setLanguage(langMap[extension] || 'plaintext');
+        
+        // Add GitHub-specific welcome message
+        setChatMessages([{
+          id: Date.now(),
+          role: 'assistant',
+          content: `📁 **GitHub File Loaded!**
+
+**Repository:** ${selectedFile.githubInfo.repoFullName}
+**File:** ${selectedFile.githubInfo.filePath}
+**Branch:** ${selectedFile.githubInfo.branch}
+
+🔧 I can help you:
+- Edit and analyze this GitHub file
+- Push changes back to GitHub
+- Explain the code structure
+- Suggest improvements
+
+💡 **Tip:** Make your changes and click "Push to GitHub" to save them to the repository!`,
+          timestamp: new Date()
+        }]);
+        
+        setHasUnsavedChanges(false);
+      } else if (selectedFile.notes !== undefined) {
+        // Handle regular local files
+        setIsGitHubFile(false);
+        setGithubInfo(null);
+        setOriginalContent('');
+        setCode(selectedFile.notes || defaultCode);
+        setFileName(selectedFile.title || 'untitled.js');
+        setHasUnsavedChanges(false);
+        
+        // Regular welcome message
+        setChatMessages([{
+          id: Date.now(),
+          role: 'assistant',
+          content: `🚀 **Enhanced AI IDE Ready!**
 
 I'm your AI coding assistant, here to help you:
 
 🔧 **Code Analysis & Debugging**
 - Find and fix bugs in your code
-- Explain complex code sections
+- Explain complex code sections  
 - Suggest optimizations
 
 ✨ **Smart Code Generation**
@@ -163,44 +229,61 @@ I'm your AI coding assistant, here to help you:
 - Learn new patterns and techniques
 
 **Try selecting some code and right-click for AI actions, or just chat with me!**`,
-      timestamp: new Date()
-    }]);
-  }, []);
-
-  // Load selected file content
-  useEffect(() => {
-    if (selectedFile) {
-      setCode(selectedFile.notes || defaultCode);
-      setFileName(selectedFile.title || 'untitled.js');
-      
-      // Set language based on file extension
-      const extension = selectedFile.title?.split('.').pop()?.toLowerCase();
-      const languageMap = {
-        'js': 'javascript',
-        'jsx': 'javascript',
-        'ts': 'typescript',
-        'tsx': 'typescript',
-        'py': 'python',
-        'html': 'html',
-        'css': 'css',
-        'scss': 'scss',
-        'json': 'json',
-        'md': 'markdown',
-        'java': 'java',
-        'cpp': 'cpp',
-        'c': 'c',
-        'php': 'php',
-        'rb': 'ruby',
-        'go': 'go',
-        'rs': 'rust'
-      };
-      setLanguage(languageMap[extension] || 'javascript');
+          timestamp: new Date()
+        }]);
+      }
     } else {
+      // No file selected, show default
+      setIsGitHubFile(false);
+      setGithubInfo(null);
+      setOriginalContent('');
       setCode(defaultCode);
       setFileName('untitled.js');
       setLanguage('javascript');
+      setHasUnsavedChanges(false);
+      
+      // Default welcome message
+      setChatMessages([{
+        id: Date.now(),
+        role: 'assistant',
+        content: `🚀 **Enhanced AI IDE Ready!**
+
+I'm your AI coding assistant, here to help you:
+
+🔧 **Code Analysis & Debugging**
+- Find and fix bugs in your code
+- Explain complex code sections  
+- Suggest optimizations
+
+✨ **Smart Code Generation**
+- Auto-complete functions and classes
+- Generate boilerplate code
+- Create documentation
+
+🏗️ **Refactoring & Optimization**
+- Improve code structure
+- Performance optimizations
+- Best practices suggestions
+
+💬 **Interactive Help**
+- Ask me anything about your code
+- Get explanations and examples
+- Learn new patterns and techniques
+
+**Try selecting some code and right-click for AI actions, or just chat with me!**`,
+        timestamp: new Date()
+      }]);
     }
-  }, [selectedFile, defaultCode]);
+  }, [selectedFile]);
+
+  // Track code changes for GitHub files
+  useEffect(() => {
+    if (isGitHubFile && originalContent !== '') {
+      setHasUnsavedChanges(code !== originalContent);
+    }
+  }, [code, originalContent, isGitHubFile]);
+
+
 
   // Handle editor mount
   const handleEditorDidMount = (editor, monaco) => {
@@ -537,6 +620,121 @@ Please provide helpful assistance related to the code or general programming que
     setTimeout(() => setShowAlert(false), 3000);
   };
 
+  // GitHub push function
+  const pushToGitHub = async () => {
+    if (!isGitHubFile || !githubInfo || !hasUnsavedChanges) {
+      showAlertMessage('No changes to push or not a GitHub file', 'warning');
+      return;
+    }
+
+    // Get GitHub token from localStorage (set by the main app)
+    const githubToken = localStorage.getItem('github_token');
+    if (!githubToken) {
+      showAlertMessage('Please connect to GitHub first in the AI Assistant tab', 'error');
+      return;
+    }
+
+    setIsPushingToGitHub(true);
+    
+    try {
+      // First, get the file's current SHA (required for updates)
+      const getFileResponse = await fetch(
+        `https://api.github.com/repos/${githubInfo.repoFullName}/contents/${githubInfo.filePath}`,
+        {
+          headers: {
+            'Authorization': `token ${githubToken}`,
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        }
+      );
+
+      let sha = null;
+      if (getFileResponse.ok) {
+        const fileData = await getFileResponse.json();
+        sha = fileData.sha;
+      }
+
+      // Prepare the update payload
+      const updatePayload = {
+        message: `Update ${githubInfo.filePath} via Enhanced Web IDE`,
+        content: btoa(unescape(encodeURIComponent(code))), // Base64 encode the content
+        branch: githubInfo.branch || 'main'
+      };
+
+      if (sha) {
+        updatePayload.sha = sha; // Required for updating existing files
+      }
+
+      // Push the changes
+      const updateResponse = await fetch(
+        `https://api.github.com/repos/${githubInfo.repoFullName}/contents/${githubInfo.filePath}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `token ${githubToken}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(updatePayload)
+        }
+      );
+
+      if (updateResponse.ok) {
+        const result = await updateResponse.json();
+        setOriginalContent(code); // Update the original content
+        setHasUnsavedChanges(false);
+        
+        showAlertMessage('Successfully pushed to GitHub!', 'success');
+        
+        // Add success message to chat
+        const successMessage = {
+          id: Date.now(),
+          role: 'assistant',
+          content: `🎉 **Successfully pushed to GitHub!**
+
+**Repository:** ${githubInfo.repoFullName}
+**File:** ${githubInfo.filePath}
+**Commit:** ${result.commit.sha.substring(0, 7)}
+
+Your changes have been saved to the repository. Great work! 🚀`,
+          timestamp: new Date()
+        };
+        setChatMessages(prev => [...prev, successMessage]);
+        
+        // Notify parent component about the change
+        if (onFileChange) {
+          onFileChange(code);
+        }
+      } else {
+        const error = await updateResponse.text();
+        throw new Error(`GitHub API error: ${updateResponse.status} - ${error}`);
+      }
+    } catch (error) {
+      console.error('Error pushing to GitHub:', error);
+      showAlertMessage(`Failed to push to GitHub: ${error.message}`, 'error');
+      
+      // Add error message to chat
+      const errorMessage = {
+        id: Date.now(),
+        role: 'assistant',
+        content: `❌ **Failed to push to GitHub**
+
+**Error:** ${error.message}
+
+**Troubleshooting:**
+- Check your GitHub token is valid
+- Ensure you have write access to the repository
+- Verify the file path and repository name are correct
+
+Your changes are still saved locally in the IDE.`,
+        timestamp: new Date()
+      };
+      setChatMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsPushingToGitHub(false);
+    }
+  };
+
   const executeCode = async () => {
     try {
       setOutput('Executing code...\n');
@@ -707,6 +905,33 @@ Please provide helpful assistance related to the code or general programming que
             >
               Save
             </Button>
+
+            {/* GitHub Push Button - only show for GitHub files */}
+            {isGitHubFile && (
+              <Tooltip title={hasUnsavedChanges ? "Push changes to GitHub" : "No changes to push"}>
+                <Button
+                  variant="contained"
+                  startIcon={isPushingToGitHub ? <CircularProgress size={16} color="inherit" /> : <GitHubIcon />}
+                  onClick={pushToGitHub}
+                  disabled={!hasUnsavedChanges || isPushingToGitHub}
+                  sx={{ 
+                    background: hasUnsavedChanges 
+                      ? 'linear-gradient(45deg, #2196F3 30%, #42A5F5 90%)' 
+                      : 'linear-gradient(45deg, #9E9E9E 30%, #BDBDBD 90%)',
+                    '&:hover': {
+                      background: hasUnsavedChanges 
+                        ? 'linear-gradient(45deg, #1976D2 30%, #2196F3 90%)'
+                        : 'linear-gradient(45deg, #757575 30%, #9E9E9E 90%)'
+                    },
+                    '&:disabled': {
+                      background: 'linear-gradient(45deg, #E0E0E0 30%, #F5F5F5 90%)'
+                    }
+                  }}
+                >
+                  {isPushingToGitHub ? 'Pushing...' : (hasUnsavedChanges ? 'Push to GitHub' : 'No Changes')}
+                </Button>
+              </Tooltip>
+            )}
             
             <Button
               variant="contained"
