@@ -75,7 +75,7 @@ import FlowchartEditor from './FlowchartEditor';
 import CanvaEditor from './CanvaEditor';
 
 import { llmIntegration } from './llm-integration';
-import ChatGPTInterface from './ChatGPTInterface';
+
 import WebIDE from './WebIDE';
 import EnhancedWebIDE from './EnhancedWebIDE';
 
@@ -4109,7 +4109,6 @@ useEffect(() => {
                 <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#fff' }}>
                   <Tabs value={activeDevelopmentTab} onChange={(_, v) => setActiveDevelopmentTab(v)}>
                     <Tab label="Google Docs" value="gdocs" />
-                    <Tab label="AI Assistant" value="ai-assistant" />
                     <Tab label="Web IDE" value="web-ide" />
                     <Tab label="Resources" value="resources" />
                     <Tab label="Search" value="search" />
@@ -4227,40 +4226,6 @@ useEffect(() => {
                        )}
                      </Box>
                    )}
-
-                  {activeDevelopmentTab === 'ai-assistant' && (
-                    <Box>
-                      <Typography variant="h5" fontWeight={700} mb={3}>AI Assistant</Typography>
-                      <Card sx={{ p: 3, mb: 3, bgcolor: '#f0f8ff' }}>
-                        <Typography variant="h6" fontWeight={600} mb={2}>
-                          <SmartToyIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                          ChatGPT-Style AI Assistant
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary" mb={3}>
-                          Interact with an AI assistant that can help you edit Google Docs, generate code, and provide intelligent responses.
-                        </Typography>
-                      </Card>
-                      
-                      <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden', height: '70vh' }}>
-                        <ChatGPTInterface 
-                          onEditGoogleDoc={(content) => {
-                            console.log('AI wants to edit Google Doc:', content);
-                            // This would integrate with the Google Docs editor
-                          }}
-                          onGenerateCode={(prompt) => {
-                            console.log('AI wants to generate code:', prompt);
-                            // This would integrate with the Web IDE
-                          }}
-                          onExecuteCode={(code) => {
-                            console.log('AI wants to execute code:', code);
-                            // This would execute in the Web IDE
-                          }}
-                          googleToken={googleToken}
-                          currentDocId={googleDocUrl ? googleDocUrl.match(/\/document\/d\/([a-zA-Z0-9-_]+)/)?.[1] : null}
-                        />
-                      </Card>
-                    </Box>
-                  )}
 
 
 
