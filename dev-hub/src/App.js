@@ -48,6 +48,8 @@ import AnalyticsIcon from '@mui/icons-material/Analytics';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import WaveformIcon from '@mui/icons-material/GraphicEq';
+import MenuIcon from '@mui/icons-material/Menu';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SaveIcon from '@mui/icons-material/Save';
@@ -78,6 +80,7 @@ import HackathonAssistant from './HackathonAssistant';
 import { llmIntegration } from './llm-integration';
 import ChatGPTInterface from './ChatGPTInterface';
 import WebIDE from './WebIDE';
+import EnhancedWebIDE from './EnhancedWebIDE';
 
 import OpenAITest from './OpenAITest';
 import AdvancedAIOrchestrator from './AdvancedAIOrchestrator';
@@ -1872,12 +1875,15 @@ export default function App() {
   // New UI state for collapsible sections
   const [expandedSections, setExpandedSections] = useState({
     fileExplorer: true,
-    collaborators: true,
+    collaborators: false,
     chat: false,
     aiTools: false,
     resources: true,
     development: true
   });
+  
+  // Sidebar collapse state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   
   // Development workspace state
   const [activeDevelopmentTab, setActiveDevelopmentTab] = useState('github');
@@ -1886,6 +1892,7 @@ export default function App() {
   const [githubFile, setGithubFile] = useState('');
   const [googleDocUrl, setGoogleDocUrl] = useState('');
   const [githubToken, setGithubToken] = useState(null);
+  const [useEnhancedIDE, setUseEnhancedIDE] = useState(true); // Default to enhanced IDE
   // --- GOOGLE OAUTH STATE AND INIT ---
 
   // At the top of the App component, add:
@@ -3829,22 +3836,47 @@ useEffect(() => {
           ) : (
             // Main Workspace View
             <Box sx={{ display: 'flex', height: 'calc(100vh - 64px)' }}>
+              {/* Sidebar Toggle Button */}
+              <IconButton
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                sx={{
+                  position: 'fixed',
+                  top: '70px',
+                  left: sidebarCollapsed ? '8px' : '308px',
+                  zIndex: 1300,
+                  bgcolor: 'primary.main',
+                  color: 'white',
+                  width: 32,
+                  height: 32,
+                  '&:hover': {
+                    bgcolor: 'primary.dark',
+                  },
+                  transition: 'left 0.3s ease'
+                }}
+              >
+                {sidebarCollapsed ? <MenuIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
+              </IconButton>
+
               {/* Left Sidebar - File Explorer & Tools */}
               <Box sx={{ 
-                width: 320, 
-                borderRight: '1px solid #e0e0e0', 
+                width: sidebarCollapsed ? 0 : 320,
+                borderRight: sidebarCollapsed ? 'none' : '1px solid #e0e0e0', 
                 bgcolor: '#f8f9fa',
                 overflowY: 'auto',
-                p: 2
+                overflow: sidebarCollapsed ? 'hidden' : 'auto',
+                p: sidebarCollapsed ? 0 : 2,
+                transition: 'width 0.3s ease, padding 0.3s ease'
               }}>
-                <Stack direction="row" alignItems="center" spacing={2} mb={3}>
-                  <Typography variant="h5" fontWeight={700} color="primary.main">
-                    {selectedWksp.name}
-                  </Typography>
-                  <Button size="small" variant="outlined" onClick={() => setSelectedWksp(null)}>
-                    <ArrowBackIcon />
-                  </Button>
-                </Stack>
+                {!sidebarCollapsed && (
+                  <>
+                    <Stack direction="row" alignItems="center" spacing={2} mb={3}>
+                      <Typography variant="h5" fontWeight={700} color="primary.main">
+                        {selectedWksp.name}
+                      </Typography>
+                      <Button size="small" variant="outlined" onClick={() => setSelectedWksp(null)}>
+                        <ArrowBackIcon />
+                      </Button>
+                    </Stack>
 
                 {/* File Explorer Section */}
                 <CollapsibleSection
@@ -3989,10 +4021,18 @@ useEffect(() => {
                     ))}
                   </Box>
                 </CollapsibleSection>
+                  </>
+                )}
               </Box>
 
               {/* Main Development Area */}
-              <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <Box sx={{ 
+                flex: 1, 
+                display: 'flex', 
+                flexDirection: 'column',
+                ml: sidebarCollapsed ? '40px' : '0px',
+                transition: 'margin-left 0.3s ease'
+              }}>
                 {/* Development Tabs */}
                 <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#fff' }}>
                   <Tabs value={activeDevelopmentTab} onChange={(_, v) => setActiveDevelopmentTab(v)}>
@@ -4337,27 +4377,87 @@ useEffect(() => {
 
                   {activeDevelopmentTab === 'web-ide' && (
                     <Box>
-                      <Typography variant="h5" fontWeight={700} mb={3}>Web IDE</Typography>
-                      <Card sx={{ p: 3, mb: 3, bgcolor: '#f0f8ff' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+                        <Typography variant="h5" fontWeight={700}>
+                          {useEnhancedIDE ? 'Enhanced AI IDE' : 'Web IDE'}
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            {useEnhancedIDE ? 'AI-Enhanced' : 'Standard'}
+                          </Typography>
+                          <Button
+                            variant={useEnhancedIDE ? "contained" : "outlined"}
+                            onClick={() => setUseEnhancedIDE(!useEnhancedIDE)}
+                            startIcon={useEnhancedIDE ? <SmartToyIcon /> : <CodeIcon />}
+                            sx={{ 
+                              background: useEnhancedIDE ? 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)' : 'transparent',
+                              '&:hover': {
+                                background: useEnhancedIDE ? 'linear-gradient(45deg, #1976D2 30%, #1CB5E0 90%)' : 'rgba(0,0,0,0.04)'
+                              }
+                            }}
+                          >
+                            {useEnhancedIDE ? 'Enhanced' : 'Switch to AI'}
+                          </Button>
+                        </Box>
+                      </Box>
+                      
+                      <Card sx={{ p: 3, mb: 3, bgcolor: useEnhancedIDE ? '#f0f8ff' : '#f5f5f5' }}>
                         <Typography variant="h6" fontWeight={600} mb={2}>
-                          <CodeIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                          AI-Powered Code Editor
+                          {useEnhancedIDE ? (
+                            <>
+                              <SmartToyIcon sx={{ mr: 1, verticalAlign: 'middle', color: 'primary.main' }} />
+                              Cursor-Inspired AI Code Editor
+                            </>
+                          ) : (
+                            <>
+                              <CodeIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                              Standard Code Editor
+                            </>
+                          )}
                         </Typography>
-                        <Typography variant="body2" color="text.secondary" mb={3}>
-                          Write, debug, and optimize code with AI assistance. Features syntax highlighting, code execution, and ChatGPT integration.
+                        <Typography variant="body2" color="text.secondary" mb={2}>
+                          {useEnhancedIDE ? (
+                            <>
+                              🚀 <strong>AI-Powered Features:</strong> Intelligent code completion, real-time AI chat assistant, context-aware suggestions, code analysis, and automated refactoring - just like Cursor IDE!
+                            </>
+                          ) : (
+                            'Write, debug, and execute code with syntax highlighting and basic features.'
+                          )}
                         </Typography>
+                        {useEnhancedIDE && (
+                          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                            <Chip label="🤖 AI Chat" size="small" color="primary" variant="outlined" />
+                            <Chip label="⚡ Smart Completion" size="small" color="primary" variant="outlined" />
+                            <Chip label="🔧 Code Analysis" size="small" color="primary" variant="outlined" />
+                            <Chip label="🏗️ Auto Refactor" size="small" color="primary" variant="outlined" />
+                            <Chip label="📝 AI Comments" size="small" color="primary" variant="outlined" />
+                          </Box>
+                        )}
                       </Card>
                       
                       <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden', height: '70vh' }}>
-                        <WebIDE 
-                          selectedFile={selectedResource}
-                          onFileChange={(updatedContent) => {
-                            if (selectedResource) {
-                              const updatedFile = { ...selectedResource, notes: updatedContent };
-                              setResources(prev => prev.map(r => r.id === selectedResource.id ? updatedFile : r));
-                            }
-                          }}
-                        />
+                        {useEnhancedIDE ? (
+                          <EnhancedWebIDE 
+                            selectedFile={selectedResource}
+                            sidebarCollapsed={sidebarCollapsed}
+                            onFileChange={(updatedContent) => {
+                              if (selectedResource) {
+                                const updatedFile = { ...selectedResource, notes: updatedContent };
+                                setResources(prev => prev.map(r => r.id === selectedResource.id ? updatedFile : r));
+                              }
+                            }}
+                          />
+                        ) : (
+                          <WebIDE 
+                            selectedFile={selectedResource}
+                            onFileChange={(updatedContent) => {
+                              if (selectedResource) {
+                                const updatedFile = { ...selectedResource, notes: updatedContent };
+                                setResources(prev => prev.map(r => r.id === selectedResource.id ? updatedFile : r));
+                              }
+                            }}
+                          />
+                        )}
                       </Card>
                     </Box>
                   )}
