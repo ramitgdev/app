@@ -861,9 +861,9 @@ function isLucidchartResource(ref) {
 function extractGitHubInfo(url) {
   try {
     // Handle various GitHub URL formats
-    const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)\/blob\/([^\/]+)\/(.+)/);
-    if (match) {
-      return {
+  const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)\/blob\/([^\/]+)\/(.+)/);
+  if (match) {
+    return {
         owner: match[1],
         repo: match[2],
         branch: match[3],
@@ -899,7 +899,7 @@ function extractGitHubInfo(url) {
     return null;
   } catch (error) {
     console.error('Error extracting GitHub info:', error);
-    return null;
+  return null;
   }
 }
 // import { useState, useEffect } from "react";
@@ -3681,10 +3681,10 @@ useEffect(() => {
                             githubResource.notes = content;
                             githubResource.originalContent = content;
                           }
-                        } else {
+                  } else {
                           githubResource.notes = `// Could not decode content from GitHub\n// Repository: ${githubInfo.repoFullName}\n// File: ${githubInfo.filePath}\n// Response type: ${data.type}`;
-                        }
-                      } else {
+                  }
+                } else {
                         githubResource.notes = `// Could not fetch content from GitHub\n// Repository: ${githubInfo.repoFullName}\n// File: ${githubInfo.filePath}\n// Please check your GitHub token or repository access.`;
                       }
                     } catch (error) {
@@ -3941,14 +3941,14 @@ useEffect(() => {
               }}>
                 {!sidebarCollapsed && (
                   <>
-                    <Stack direction="row" alignItems="center" spacing={2} mb={3}>
-                      <Typography variant="h5" fontWeight={700} color="primary.main">
-                        {selectedWksp.name}
-                      </Typography>
-                      <Button size="small" variant="outlined" onClick={() => setSelectedWksp(null)}>
-                        <ArrowBackIcon />
-                      </Button>
-                    </Stack>
+                <Stack direction="row" alignItems="center" spacing={2} mb={3}>
+                  <Typography variant="h5" fontWeight={700} color="primary.main">
+                    {selectedWksp.name}
+                  </Typography>
+                  <Button size="small" variant="outlined" onClick={() => setSelectedWksp(null)}>
+                    <ArrowBackIcon />
+                  </Button>
+                </Stack>
 
                 {/* File Explorer Section */}
                 <CollapsibleSection
@@ -4069,10 +4069,10 @@ useEffect(() => {
                       Create files, generate projects, and manage your workspace with AI
                     </Typography>
                     
-                    <AICodeReviewer 
-                      workspaceId={selectedWksp.id} 
-                      currentUser={user}
-                    />
+                  <AICodeReviewer 
+                    workspaceId={selectedWksp.id} 
+                    currentUser={user}
+                  />
                   </Box>
                 </CollapsibleSection>
 
@@ -4234,11 +4234,11 @@ useEffect(() => {
                       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
                         <Typography variant="h5" fontWeight={700}>
                           {useEnhancedIDE ? 'Enhanced AI IDE' : 'Web IDE'}
-                        </Typography>
+                      </Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <Typography variant="body2" color="text.secondary">
+                              <Typography variant="body2" color="text.secondary">
                             {useEnhancedIDE ? 'AI-Enhanced' : 'Standard'}
-                          </Typography>
+                              </Typography>
                           <Button
                             variant={useEnhancedIDE ? "contained" : "outlined"}
                             onClick={() => setUseEnhancedIDE(!useEnhancedIDE)}
@@ -4252,9 +4252,9 @@ useEffect(() => {
                           >
                             {useEnhancedIDE ? 'Enhanced' : 'Switch to AI'}
                           </Button>
-                        </Box>
+                    </Box>
                       </Box>
-                      
+
                       <Card sx={{ p: 3, mb: 3, bgcolor: useEnhancedIDE ? '#f0f8ff' : '#f5f5f5' }}>
                         <Typography variant="h6" fontWeight={600} mb={2}>
                           {useEnhancedIDE ? (
@@ -4264,7 +4264,7 @@ useEffect(() => {
                             </>
                           ) : (
                             <>
-                              <CodeIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                          <CodeIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
                               Standard Code Editor
                             </>
                           )}
@@ -4285,19 +4285,95 @@ useEffect(() => {
                             <Chip label="🔧 Code Analysis" size="small" color="primary" variant="outlined" />
                             <Chip label="🏗️ Auto Refactor" size="small" color="primary" variant="outlined" />
                             <Chip label="📝 AI Comments" size="small" color="primary" variant="outlined" />
-                          </Box>
-                        )}
+                    </Box>
+                  )}
                       </Card>
-                      
+
                       <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden', height: '70vh' }}>
                         {useEnhancedIDE ? (
                           <EnhancedWebIDE 
                             selectedFile={selectedResource}
                             sidebarCollapsed={sidebarCollapsed}
+                            availableFolders={(() => {
+                              // Create available folders list from current workspace structure
+                              const availableFolders = [];
+                              
+                              // Always include root folder
+                              availableFolders.push({
+                                id: 0,
+                                name: 'All Resources',
+                                path: 'Root'
+                              });
+
+                              // Try to get folders from workspace if they exist
+                              try {
+                                if (selectedWksp && selectedWksp.folders) {
+                                  selectedWksp.folders.forEach(folder => {
+                                    if (folder.id !== 0) { // Don't duplicate root
+                                      availableFolders.push({
+                                        id: folder.id,
+                                        name: folder.text || folder.name || `Folder ${folder.id}`,
+                                        path: folder.path || folder.text || folder.name
+                                      });
+                                    }
+                                  });
+                                }
+                                
+                                // If no workspace folders, check if there are any visible folders in the UI
+                                if (typeof folders !== 'undefined' && Array.isArray(folders)) {
+                                  folders.forEach(folder => {
+                                    if (folder.id !== 0 && !availableFolders.find(f => f.id === folder.id)) {
+                                      availableFolders.push({
+                                        id: folder.id,
+                                        name: folder.text || folder.name || `Folder ${folder.id}`,
+                                        path: folder.path || folder.text || folder.name
+                                      });
+                                    }
+                                  });
+                                }
+                              } catch (error) {
+                                console.log('Could not load folder structure:', error);
+                              }
+
+                              return availableFolders;
+                            })()}
                             onFileChange={(updatedContent) => {
                               if (selectedResource) {
                                 const updatedFile = { ...selectedResource, notes: updatedContent };
                                 setResources(prev => prev.map(r => r.id === selectedResource.id ? updatedFile : r));
+                              }
+                            }}
+                            onCreateNewFile={(fileData) => {
+                              // Create a new file resource
+                              const newFile = {
+                                id: Date.now() + Math.random(), // Simple ID generation
+                                title: fileData.fileName,
+                                notes: fileData.initialContent,
+                                platform: 'Local',
+                                folder: fileData.folder, // Use the selected folder ID
+                                folderName: fileData.folderName, // Keep folder name for reference
+                                createdAt: new Date().toISOString(),
+                                type: 'file'
+                              };
+
+                              // Add to resources - first check if it exists, if not create it
+                              try {
+                                if (selectedWksp && selectedWksp.resources) {
+                                  // If workspace has resources array, add to it
+                                  selectedWksp.resources = [...(selectedWksp.resources || []), newFile];
+                                } else {
+                                  // Fallback: try to use setResources if it exists
+                                  if (typeof setResources === 'function') {
+                                    setResources(prev => [...(prev || []), newFile]);
+                                  }
+                                }
+                              } catch (error) {
+                                console.log('File created but may not appear in File Explorer yet:', error);
+                              }
+
+                              // If requested, open the new file in the IDE
+                              if (fileData.openInIDE) {
+                                setSelectedResource(newFile);
                               }
                             }}
                           />
@@ -4312,7 +4388,7 @@ useEffect(() => {
                             }}
                           />
                         )}
-                      </Card>
+                          </Card>
                     </Box>
                   )}
 

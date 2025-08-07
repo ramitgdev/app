@@ -35,8 +35,10 @@ import SpeedIcon from '@mui/icons-material/Speed';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import GitHubIcon from '@mui/icons-material/GitHub';
+import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
+import NoteAddIcon from '@mui/icons-material/NoteAdd';
 
-const EnhancedWebIDE = ({ selectedFile, onFileChange, sidebarCollapsed = false }) => {
+const EnhancedWebIDE = ({ selectedFile, onFileChange, sidebarCollapsed = false, onCreateNewFile, availableFolders = [] }) => {
   const defaultCode = `// Welcome to the Enhanced AI-Powered Web IDE!
 // Click the green "Run" button to execute this code and see the output below!
 
@@ -135,6 +137,11 @@ console.log("\\n🎉 Code execution completed!");`;
   const [originalContent, setOriginalContent] = useState('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isPushingToGitHub, setIsPushingToGitHub] = useState(false);
+  
+  // New file dialog state
+  const [showNewFileDialog, setShowNewFileDialog] = useState(false);
+  const [newFileName, setNewFileName] = useState('');
+  const [newFileFolder, setNewFileFolder] = useState(0); // Default to root folder ID
   
   // Refs
   const editorRef = useRef(null);
@@ -620,6 +627,182 @@ Please provide helpful assistance related to the code or general programming que
     setTimeout(() => setShowAlert(false), 3000);
   };
 
+  // New file creation function
+  const handleCreateNewFile = () => {
+    if (!newFileName.trim()) {
+      showAlertMessage('Please enter a file name', 'warning');
+      return;
+    }
+
+    // Add file extension if not provided
+    let fileName = newFileName.trim();
+    if (!fileName.includes('.')) {
+      // Default to .js if no extension
+      fileName += '.js';
+    }
+
+    // Create the new file
+    if (onCreateNewFile) {
+      // Find the selected folder name
+      const selectedFolder = availableFolders.find(f => f.id === newFileFolder);
+      
+      onCreateNewFile({
+        fileName: fileName,
+        folder: newFileFolder, // Folder ID
+        folderName: selectedFolder ? selectedFolder.name : 'All Resources', // Folder name for reference
+        initialContent: getInitialContentForFile(fileName),
+        openInIDE: true
+      });
+    }
+
+    // Reset dialog state
+    setNewFileName('');
+    setNewFileFolder(availableFolders.length > 0 ? availableFolders[0].id : 0);
+    setShowNewFileDialog(false);
+    
+    showAlertMessage(`File "${fileName}" created successfully!`, 'success');
+  };
+
+  // Get initial content based on file type
+  const getInitialContentForFile = (fileName) => {
+    const extension = fileName.split('.').pop().toLowerCase();
+    
+    const templates = {
+      js: `// ${fileName}
+// Created on ${new Date().toLocaleDateString()}
+
+console.log("Hello from ${fileName}!");
+
+function main() {
+  // Your code here
+}
+
+main();
+`,
+      jsx: `// ${fileName}
+// Created on ${new Date().toLocaleDateString()}
+
+import React from 'react';
+
+const ComponentName = () => {
+  return (
+    <div>
+      <h1>Hello from ${fileName}!</h1>
+    </div>
+  );
+};
+
+export default ComponentName;
+`,
+      ts: `// ${fileName}
+// Created on ${new Date().toLocaleDateString()}
+
+console.log("Hello from ${fileName}!");
+
+function main(): void {
+  // Your code here
+}
+
+main();
+`,
+      tsx: `// ${fileName}
+// Created on ${new Date().toLocaleDateString()}
+
+import React from 'react';
+
+interface Props {
+  // Define props here
+}
+
+const ComponentName: React.FC<Props> = () => {
+  return (
+    <div>
+      <h1>Hello from ${fileName}!</h1>
+    </div>
+  );
+};
+
+export default ComponentName;
+`,
+      py: `# ${fileName}
+# Created on ${new Date().toLocaleDateString()}
+
+def main():
+    print(f"Hello from ${fileName}!")
+    # Your code here
+
+if __name__ == "__main__":
+    main()
+`,
+      html: `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${fileName}</title>
+</head>
+<body>
+    <h1>Hello from ${fileName}!</h1>
+    <!-- Your content here -->
+</body>
+</html>
+`,
+      css: `/* ${fileName} */
+/* Created on ${new Date().toLocaleDateString()} */
+
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+`,
+      md: `# ${fileName}
+
+Created on ${new Date().toLocaleDateString()}
+
+## Overview
+
+Your content here...
+
+## Features
+
+- Feature 1
+- Feature 2
+- Feature 3
+
+## Usage
+
+\`\`\`javascript
+// Example code
+console.log("Hello World!");
+\`\`\`
+`,
+      json: `{
+  "name": "${fileName.replace('.json', '')}",
+  "version": "1.0.0",
+  "description": "Created on ${new Date().toLocaleDateString()}",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "",
+  "license": "MIT"
+}
+`
+    };
+
+    return templates[extension] || `// ${fileName}
+// Created on ${new Date().toLocaleDateString()}
+
+// Your code here...
+`;
+  };
+
   // GitHub push function
   const pushToGitHub = async () => {
     if (!isGitHubFile || !githubInfo || !hasUnsavedChanges) {
@@ -896,6 +1079,25 @@ Your changes are still saved locally in the IDE.`,
               >
                 {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
               </IconButton>
+            </Tooltip>
+            
+            <Tooltip title="Create a new file">
+              <Button
+                variant="outlined"
+                startIcon={<NoteAddIcon />}
+                onClick={() => setShowNewFileDialog(true)}
+                sx={{ 
+                  color: 'success.main',
+                  borderColor: 'success.main',
+                  '&:hover': {
+                    borderColor: 'success.dark',
+                    backgroundColor: 'success.light',
+                    color: 'success.contrastText',
+                  }
+                }}
+              >
+                New File
+              </Button>
             </Tooltip>
             
             <Button
@@ -1490,6 +1692,83 @@ Your changes are still saved locally in the IDE.`,
             setShowSaveDialog(false);
           }} variant="contained">
             Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* New File Dialog */}
+      <Dialog open={showNewFileDialog} onClose={() => setShowNewFileDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <NoteAddIcon color="success" />
+          Create New File
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Create a new file in your local workspace. The file will be stored in your file explorer.
+          </Typography>
+          
+          <TextField
+            fullWidth
+            label="File Name"
+            value={newFileName}
+            onChange={(e) => setNewFileName(e.target.value)}
+            placeholder="e.g., myComponent.js, styles.css, README.md"
+            sx={{ mb: 3 }}
+            helperText="Add file extension (.js, .css, .html, etc.) or it will default to .js"
+          />
+          
+          <FormControl fullWidth>
+            <InputLabel>Folder Location</InputLabel>
+            <Select
+              value={newFileFolder}
+              onChange={(e) => setNewFileFolder(e.target.value)}
+              label="Folder Location"
+            >
+              {availableFolders.length > 0 ? (
+                availableFolders.map((folder) => (
+                  <MenuItem key={folder.id} value={folder.id}>
+                    📁 {folder.name}
+                    {folder.path && folder.path !== folder.name && (
+                      <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
+                        ({folder.path})
+                      </Typography>
+                    )}
+                  </MenuItem>
+                ))
+              ) : (
+                <MenuItem value={0}>📁 All Resources (Root)</MenuItem>
+              )}
+            </Select>
+          </FormControl>
+          
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
+            <Typography variant="caption" color="info.dark">
+              💡 <strong>Tip:</strong> The file will be created with a starter template based on its extension and automatically opened in the IDE for editing.
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              setShowNewFileDialog(false);
+              setNewFileName('');
+              setNewFileFolder(availableFolders.length > 0 ? availableFolders[0].id : 0);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleCreateNewFile}
+            variant="contained"
+            startIcon={<NoteAddIcon />}
+            sx={{ 
+              background: 'linear-gradient(45deg, #4CAF50 30%, #66BB6A 90%)',
+              '&:hover': {
+                background: 'linear-gradient(45deg, #388E3C 30%, #4CAF50 90%)'
+              }
+            }}
+          >
+            Create File
           </Button>
         </DialogActions>
       </Dialog>
