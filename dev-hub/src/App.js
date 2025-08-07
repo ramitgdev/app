@@ -4641,35 +4641,7 @@ useEffect(() => {
                            </Card>
                        )}
 
-                       {/* Quick Create New Document */}
-                       {googleToken && (
-                         <Card sx={{ p: 3, mt: 3, bgcolor: '#f0f8ff' }}>
-                           <Typography variant="h6" fontWeight={600} mb={2}>
-                             Quick Actions
-                           </Typography>
-                                                    <Stack direction="row" spacing={2}>
-                           <Button 
-                             variant="outlined" 
-                             startIcon={<AddIcon />}
-                             onClick={() => {
-                               setGoogleDocUrl('https://docs.google.com/document/d/new-document');
-                               alert('New document created! You can now start editing in the local editor.');
-                             }}
-                           >
-                             Create New Document
-                           </Button>
-                           <Button 
-                             variant="outlined" 
-                             startIcon={<FolderIcon />}
-                             onClick={() => {
-                               window.open('https://drive.google.com', '_blank');
-                             }}
-                           >
-                             Open Google Drive
-                           </Button>
-                         </Stack>
-                         </Card>
-                       )}
+                       
                      </Box>
                    )}
 
