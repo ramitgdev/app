@@ -10,7 +10,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import { modernTheme } from './ModernTheme';
 // --- NEW: Material-UI imports ---
 import {
-  AppBar, Toolbar, Typography, Button, IconButton, Box, Paper, Drawer, List, ListItem, ListItemIcon, ListItemText, Divider, TextField, InputAdornment, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Chip, Tooltip, Avatar, Stack, Snackbar, Alert, Radio, RadioGroup, FormControlLabel, FormControl, FormLabel, CssBaseline, Container, Grid, Card, CardContent, CardActions, Tabs, Tab, ListItemAvatar, CircularProgress, SpeedDial, SpeedDialAction, SpeedDialIcon, Fab, Badge, LinearProgress, Accordion, AccordionSummary, AccordionDetails
+  AppBar, Toolbar, Typography, Button, IconButton, Box, Paper, Drawer, List, ListItem, ListItemIcon, ListItemText, Divider, TextField, InputAdornment, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Chip, Tooltip, Avatar, Stack, Snackbar, Alert, Radio, RadioGroup, FormControlLabel, FormControl, FormLabel, CssBaseline, Container, Grid, Card, CardContent, CardActions, Tabs, Tab, ListItemAvatar, CircularProgress, SpeedDial, SpeedDialAction, SpeedDialIcon, Fab, Badge, LinearProgress, Accordion, AccordionSummary, AccordionDetails, ListItemSecondaryAction
 } from '@mui/material';
 
 import FolderIcon from '@mui/icons-material/Folder';
@@ -686,44 +686,276 @@ async function sendEmailNotification(to, subject, message) {
 }
 
 // --- Update WorkspaceShare to send email on invite ---
-function WorkspaceShare({ workspaceId, currentUser, onShared, onInviteSuccess }) {
+function WorkspaceShare({ workspaceId, currentUser, onShared, onInviteSuccess, workspaceName }) {
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteMessage, setInviteMessage] = useState("");
   const [inviteMsg, setInviteMsg] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [invitedMembers, setInvitedMembers] = useState([]);
+  const [showInvitedList, setShowInvitedList] = useState(false);
+
+  // Fetch invited members
+  useEffect(() => {
+    async function fetchInvitedMembers() {
+      const { data, error } = await supabase
+        .from('workspace_members')
+        .select(`
+          id,
+          user_email,
+          role,
+          invited_at,
+          accepted_at,
+          users!workspace_members_invited_by_fkey(full_name, email)
+        `)
+        .eq('workspace_id', workspaceId);
+      
+      if (!error && data) {
+        setInvitedMembers(data);
+      }
+    }
+    fetchInvitedMembers();
+  }, [workspaceId]);
+
   async function handleInvite() {
     if (!inviteEmail) return;
+    
+    setLoading(true);
+    setInviteMsg("");
+
+    try {
+      // Get workspace and inviter details
+      const { data: workspace, error: workspaceError } = await supabase
+        .from('workspaces')
+        .select('name, description')
+        .eq('id', workspaceId)
+        .single();
+      
+      if (workspaceError) {
+        setInviteMsg(`Error: Workspace not found`);
+        return;
+      }
+
+      // Add user to workspace_members
+      const inviteData = { 
+        workspace_id: workspaceId, 
+        user_email: inviteEmail, 
+        invited_by: currentUser.id,
+        role: 'member',
+        accepted_at: null
+      };
+      
+      console.log('Creating invite with data:', inviteData);
+      
+      console.log('About to insert invite data:', inviteData);
+      
+      const { data: inviteResult, error: memberError } = await supabase
+        .from('workspace_members')
+        .upsert([inviteData])
+        .select();
+      
+      if (memberError) {
+        console.error('Error creating invite:', memberError);
+        console.error('Error details:', memberError.details);
+        console.error('Error hint:', memberError.hint);
+        setInviteMsg(`Error: ${memberError.message}`);
+        return;
+      }
+      
+      console.log('Invite created successfully:', inviteResult);
+      
+      // Verify the invite was actually created
+      const { data: verifyInvite, error: verifyError } = await supabase
+        .from('workspace_members')
+        .select('*')
+        .eq('workspace_id', workspaceId)
+        .eq('user_email', inviteEmail);
+      
+      console.log('Verification - invite in database:', verifyInvite);
+      if (verifyError) {
+        console.error('Verification error:', verifyError);
+      }
+
+      // Send email via Express server
+      try {
+        const response = await fetch('http://localhost:3002/api/invite', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: inviteEmail,
+            workspace_id: workspaceId,
+            inviter_id: currentUser.id,
+            message: inviteMessage
+          }),
+        });
+
+        const result = await response.json();
+        if (result.ok) {
+          console.log('Email sent successfully:', result);
+        } else {
+          console.error('Email sending failed:', result);
+        }
+      } catch (emailError) {
+        console.error('Email service error:', emailError);
+      }
+
+      setInviteMsg(`Successfully invited ${inviteEmail} to "${workspace.name}"!`);
+      setInviteEmail("");
+      setInviteMessage("");
+      
+      // Refresh invited members list
+      const { data, error } = await supabase
+        .from('workspace_members')
+        .select(`
+          id,
+          user_email,
+          role,
+          invited_at,
+          accepted_at,
+          users!workspace_members_invited_by_fkey(full_name, email)
+        `)
+        .eq('workspace_id', workspaceId);
+      
+      if (!error && data) {
+        setInvitedMembers(data);
+      }
+      onInviteSuccess && onInviteSuccess();
+      
+    } catch (error) {
+      setInviteMsg(`Error: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRemoveMember(memberId, userEmail) {
+    if (!window.confirm(`Are you sure you want to remove ${userEmail} from this workspace?`)) return;
+    
     const { error } = await supabase
       .from('workspace_members')
-      .insert([{ workspace_id: workspaceId, user_email: inviteEmail, invited_by: currentUser.id }]);
-    if (error) {
-      setInviteMsg(error.message);
-      alert('Failed to invite: ' + error.message);
-      console.error('Invite error:', error);
-      return;
+      .delete()
+      .eq('id', memberId);
+    
+    if (!error) {
+      setInvitedMembers(invitedMembers.filter(m => m.id !== memberId));
+      setInviteMsg(`${userEmail} removed from workspace`);
+    } else {
+      setInviteMsg(`Error removing member: ${error.message}`);
     }
-    setInviteMsg("Invited!");
-    setInviteEmail("");
-    await sendEmailNotification(inviteEmail, "You've been invited to a workspace!", `You have been invited by ${currentUser.email} to join a workspace. Please sign up or log in to accept the invite.`);
-    onInviteSuccess && onInviteSuccess();
-    onShared && onShared();
   }
+
   return (
-    <Dialog open onClose={onShared} maxWidth="xs" fullWidth>
-      <DialogTitle>Share Workspace</DialogTitle>
+    <Dialog open onClose={onShared} maxWidth="md" fullWidth>
+      <DialogTitle>
+        <Box display="flex" alignItems="center" gap={1}>
+          <ShareIcon />
+          Share Workspace: {workspaceName}
+        </Box>
+      </DialogTitle>
       <DialogContent>
-        <TextField
-          autoFocus
-          margin="dense"
-          label="Invite email"
-          type="email"
-          fullWidth
-          value={inviteEmail}
-          onChange={e => setInviteEmail(e.target.value)}
-        />
-        {inviteMsg && <Typography variant="body2" color="primary" mt={1}>{inviteMsg}</Typography>}
+        <Grid container spacing={2}>
+          <Grid item xs={12}>
+            <Typography variant="h6" gutterBottom>Invite New Members</Typography>
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Email address"
+              type="email"
+              fullWidth
+              value={inviteEmail}
+              onChange={e => setInviteEmail(e.target.value)}
+              placeholder="Enter email address"
+            />
+            <TextField
+              margin="dense"
+              label="Personal message (optional)"
+              multiline
+              rows={2}
+              fullWidth
+              value={inviteMessage}
+              onChange={e => setInviteMessage(e.target.value)}
+              placeholder="Add a personal message to your invitation..."
+            />
+            {inviteMsg && (
+              <Alert severity={inviteMsg.includes('Error') ? 'error' : 'success'} sx={{ mt: 1 }}>
+                {inviteMsg}
+              </Alert>
+            )}
+          </Grid>
+          
+          <Grid item xs={12}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+              <Typography variant="h6">Workspace Members</Typography>
+              <Button
+                size="small"
+                onClick={() => setShowInvitedList(!showInvitedList)}
+                startIcon={showInvitedList ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              >
+                {showInvitedList ? 'Hide' : 'Show'} Members
+              </Button>
+            </Box>
+            
+            {showInvitedList && (
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                {invitedMembers.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    No members invited yet
+                  </Typography>
+                ) : (
+                  <List dense>
+                    {invitedMembers.map((member) => (
+                      <ListItem key={member.id} divider>
+                        <ListItemAvatar>
+                          <Avatar>
+                            <PersonIcon />
+                          </Avatar>
+                        </ListItemAvatar>
+                        <ListItemText
+                          primary={member.user_email}
+                          secondary={
+                            <Box>
+                              <Chip 
+                                size="small" 
+                                label={member.accepted_at ? 'Active' : 'Pending'} 
+                                color={member.accepted_at ? 'success' : 'warning'}
+                                sx={{ mr: 1 }}
+                              />
+                              <Typography variant="caption" color="text.secondary">
+                                {member.accepted_at ? 'Joined' : 'Invited'} on{' '}
+                                {new Date(member.accepted_at || member.invited_at).toLocaleDateString()}
+                              </Typography>
+                            </Box>
+                          }
+                        />
+                        <ListItemSecondaryAction>
+                          <IconButton
+                            edge="end"
+                            onClick={() => handleRemoveMember(member.id, member.user_email)}
+                            disabled={member.user_email === currentUser.email}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </ListItemSecondaryAction>
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+              </Paper>
+            )}
+          </Grid>
+        </Grid>
       </DialogContent>
       <DialogActions>
         <Button onClick={onShared} startIcon={<CloseIcon />}>Close</Button>
-        <Button onClick={handleInvite} variant="contained" startIcon={<ShareIcon />}>Invite</Button>
+        <Button 
+          onClick={handleInvite} 
+          variant="contained" 
+          startIcon={<ShareIcon />}
+          disabled={!inviteEmail || loading}
+        >
+          {loading ? 'Sending...' : 'Send Invite'}
+        </Button>
       </DialogActions>
     </Dialog>
   );
@@ -3638,10 +3870,21 @@ async function fetchWorkspaces() {
     
     // Get workspaces where user is a member (both invited and accepted)
     let { data: memberRows } = await supabase.from('workspace_members').select('workspace_id, user_id').eq('user_email', user.email);
-    const memberWorkspaceIds = (memberRows || []).map(wm => wm.workspace_id);
     
-    let { data: shared } = memberWorkspaceIds.length
-      ? await supabase.from('workspaces').select('*').in('id', memberWorkspaceIds)
+    // Also get workspaces where user_id matches (for accepted invites)
+    let { data: acceptedMemberRows } = await supabase.from('workspace_members').select('workspace_id, user_id').eq('user_id', user.id);
+    
+    // Combine both sets of workspace IDs
+    const memberWorkspaceIds = [
+      ...(memberRows || []).map(wm => wm.workspace_id),
+      ...(acceptedMemberRows || []).map(wm => wm.workspace_id)
+    ];
+    
+    // Remove duplicates
+    const uniqueWorkspaceIds = [...new Set(memberWorkspaceIds)];
+    
+    let { data: shared } = uniqueWorkspaceIds.length
+      ? await supabase.from('workspaces').select('*').in('id', uniqueWorkspaceIds)
       : { data: [] };
     
     // Combine and deduplicate workspaces
@@ -3681,9 +3924,93 @@ useEffect(() => {
 }, [selectedWksp, showShare]);
 
   useEffect(() => {
-    if (user) fetchWorkspaces();
+    if (user) {
+      fetchWorkspaces();
+      // Auto-accept any pending invites for this user
+      autoAcceptInvites();
+    }
     // eslint-disable-next-line
-  }, [user, showShare, selectedWksp]);
+  }, [user]);
+
+  const [isProcessingInvites, setIsProcessingInvites] = useState(false);
+
+  async function autoAcceptInvites() {
+    if (!user || !user.email) {
+      console.log('No user or email available for autoAcceptInvites');
+      return;
+    }
+
+    if (isProcessingInvites) {
+      console.log('Already processing invites, skipping...');
+      return;
+    }
+
+    setIsProcessingInvites(true);
+
+    try {
+      console.log('Checking for pending invites for:', user.email);
+      
+      // Find any pending invites for this user
+      const { data: pendingInvites, error } = await supabase
+        .from('workspace_members')
+        .select('workspace_id, id, user_email, accepted_at, invited_at')
+        .eq('user_email', user.email)
+        .is('accepted_at', null);
+
+      // Also check all workspace_members for this user to see what exists
+      const { data: allMemberships, error: allError } = await supabase
+        .from('workspace_members')
+        .select('workspace_id, id, user_email, accepted_at, invited_at, role, invited_by')
+        .eq('user_email', user.email);
+
+      console.log('All memberships for this user:', allMemberships);
+      
+      // Also check if there are any workspace_members entries for this email at all
+      const { data: allEntriesForEmail, error: emailError } = await supabase
+        .from('workspace_members')
+        .select('*')
+        .eq('user_email', user.email);
+      
+      console.log('All entries for this email:', allEntriesForEmail);
+
+      if (error) {
+        console.error('Error checking pending invites:', error);
+        return;
+      }
+
+      console.log('Found pending invites:', pendingInvites?.length || 0, pendingInvites);
+
+      // Accept all pending invites
+      for (const invite of pendingInvites || []) {
+        console.log('Processing invite for workspace:', invite.workspace_id);
+        
+        const { error: updateError } = await supabase
+          .from('workspace_members')
+          .update({ 
+            accepted_at: new Date().toISOString(),
+            user_id: user.id
+          })
+          .eq('id', invite.id);
+
+        if (updateError) {
+          console.error('Error accepting invite:', updateError);
+        } else {
+          console.log('Successfully accepted invite for workspace:', invite.workspace_id);
+        }
+      }
+
+      // Refresh workspaces after accepting invites
+      if (pendingInvites && pendingInvites.length > 0) {
+        console.log('Refreshing workspaces after accepting invites');
+        await fetchWorkspaces();
+        console.log('Workspaces refreshed');
+      }
+    } catch (error) {
+      console.error('Error in autoAcceptInvites:', error);
+    } finally {
+      setIsProcessingInvites(false);
+    }
+  }
 
   // ---- Workspace-specific folders/resources ----
   const wsId = selectedWksp?.id || "__none__";
@@ -4191,12 +4518,18 @@ useEffect(() => {
                 </ListItem>
               )}
             </List>
-            {showShare && <WorkspaceShare workspaceId={showShare} currentUser={user} onShared={() => setShowShare(null)} onInviteSuccess={async () => {
-    if (selectedWksp) {
-      const updated = await fetchCollaboratorsWithPresence(selectedWksp.id);
-      setCollaborators(updated);
-    }
-  }} />}
+            {showShare && <WorkspaceShare 
+              workspaceId={showShare} 
+              currentUser={user} 
+              workspaceName={workspaces.find(w => w.id === showShare)?.name || 'Workspace'}
+              onShared={() => setShowShare(null)} 
+              onInviteSuccess={async () => {
+                if (selectedWksp) {
+                  const updated = await fetchCollaboratorsWithPresence(selectedWksp.id);
+                  setCollaborators(updated);
+                }
+              }} 
+            />}
           </Card>
           <Box sx={{ mt: 4, textAlign: 'center' }}>
             <Button 
@@ -4211,7 +4544,25 @@ useEffect(() => {
                 }
               }}
               startIcon={<LogoutIcon />} 
-              onClick={async () => { await supabase.auth.signOut(); }}
+              onClick={async () => { 
+                try {
+                  console.log('Signing out...');
+                  const { error } = await supabase.auth.signOut();
+                  if (error) {
+                    console.error('Sign out error:', error);
+                    // Force redirect to login
+                    window.location.href = '/';
+                  } else {
+                    console.log('Sign out successful');
+                    // Force redirect to login
+                    window.location.href = '/';
+                  }
+                } catch (err) {
+                  console.error('Sign out failed:', err);
+                  // Force redirect to login
+                  window.location.href = '/';
+                }
+              }}
             >
               Sign out
             </Button>
@@ -4301,12 +4652,18 @@ useEffect(() => {
                 ))}
               </Grid>
               
-              {showShare && <WorkspaceShare workspaceId={showShare} currentUser={user} onShared={() => setShowShare(null)} onInviteSuccess={async () => {
-                if (selectedWksp) {
-                  const updated = await fetchCollaboratorsWithPresence(selectedWksp.id);
-                  setCollaborators(updated);
-                }
-              }} />}
+              {showShare && <WorkspaceShare 
+                workspaceId={showShare} 
+                currentUser={user} 
+                workspaceName={workspaces.find(w => w.id === showShare)?.name || 'Workspace'}
+                onShared={() => setShowShare(null)} 
+                onInviteSuccess={async () => {
+                  if (selectedWksp) {
+                    const updated = await fetchCollaboratorsWithPresence(selectedWksp.id);
+                    setCollaborators(updated);
+                  }
+                }} 
+              />}
             </Container>
           ) : (
             // Main Workspace View

@@ -156,13 +156,10 @@ CREATE POLICY "Workspace owners can delete their workspaces" ON public.workspace
 CREATE POLICY "Users can view workspace members for workspaces they belong to" ON public.workspace_members
   FOR SELECT USING (
     user_id = auth.uid() OR
+    user_email = (SELECT email FROM public.users WHERE id = auth.uid()) OR
     EXISTS (
       SELECT 1 FROM public.workspaces
       WHERE id = workspace_id AND owner_id = auth.uid()
-    ) OR
-    EXISTS (
-      SELECT 1 FROM public.workspace_members wm
-      WHERE wm.workspace_id = public.workspace_members.workspace_id AND wm.user_id = auth.uid()
     )
   );
 
