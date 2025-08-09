@@ -749,7 +749,7 @@ function WorkspaceShare({ workspaceId, currentUser, onShared, onInviteSuccess, w
       console.log('About to insert invite data:', inviteData);
       
       const { data: inviteResult, error: memberError } = await supabase
-        .from('workspace_members')
+      .from('workspace_members')
         .upsert([inviteData])
         .select();
       
@@ -758,8 +758,8 @@ function WorkspaceShare({ workspaceId, currentUser, onShared, onInviteSuccess, w
         console.error('Error details:', memberError.details);
         console.error('Error hint:', memberError.hint);
         setInviteMsg(`Error: ${memberError.message}`);
-        return;
-      }
+      return;
+    }
       
       console.log('Invite created successfully:', inviteResult);
       
@@ -801,7 +801,7 @@ function WorkspaceShare({ workspaceId, currentUser, onShared, onInviteSuccess, w
       }
 
       setInviteMsg(`Successfully invited ${inviteEmail} to "${workspace.name}"!`);
-      setInviteEmail("");
+    setInviteEmail("");
       setInviteMessage("");
       
       // Refresh invited members list
@@ -820,7 +820,7 @@ function WorkspaceShare({ workspaceId, currentUser, onShared, onInviteSuccess, w
       if (!error && data) {
         setInvitedMembers(data);
       }
-      onInviteSuccess && onInviteSuccess();
+    onInviteSuccess && onInviteSuccess();
       
     } catch (error) {
       setInviteMsg(`Error: ${error.message}`);
@@ -857,14 +857,14 @@ function WorkspaceShare({ workspaceId, currentUser, onShared, onInviteSuccess, w
         <Grid container spacing={2}>
           <Grid item xs={12}>
             <Typography variant="h6" gutterBottom>Invite New Members</Typography>
-            <TextField
-              autoFocus
-              margin="dense"
+        <TextField
+          autoFocus
+          margin="dense"
               label="Email address"
-              type="email"
-              fullWidth
-              value={inviteEmail}
-              onChange={e => setInviteEmail(e.target.value)}
+          type="email"
+          fullWidth
+          value={inviteEmail}
+          onChange={e => setInviteEmail(e.target.value)}
               placeholder="Enter email address"
             />
             <TextField
@@ -3864,32 +3864,236 @@ async function fetchCollaborators(workspaceId) {
   return {members: data || [], ownerId: workspace.owner_id, users: users || []};
 }
 
+// Fix pending invites to 'active' status (this database uses 'active' not 'accepted')
+async function fixExistingAcceptedInvites() {
+  console.log('=== FIXING PENDING INVITES TO ACTIVE ===');
+  
+  const { data: pendingInvites, error } = await supabase
+    .from('workspace_members')
+    .select('*')
+    .eq('user_email', user.email)
+    .eq('status', 'pending');
+  
+  console.log('Found pending invites to fix:', pendingInvites);
+  
+  if (pendingInvites && pendingInvites.length > 0) {
+    for (const invite of pendingInvites) {
+      const { error: updateError } = await supabase
+        .from('workspace_members')
+        .update({ status: 'active' })
+        .eq('id', invite.id);
+      
+      if (updateError) {
+        console.error('Error fixing invite:', updateError);
+      } else {
+        console.log('Fixed invite for workspace:', invite.workspace_id);
+      }
+    }
+    
+    console.log('All pending invites fixed! Refreshing workspaces...');
+    fetchWorkspaces();
+  }
+}
+
+// Clean up orphaned workspace_members records (pointing to non-existent workspaces)
+async function cleanUpOrphanedMemberships() {
+  console.log('=== CLEANING UP ORPHANED MEMBERSHIPS ===');
+  
+  // Get all workspace IDs that actually exist
+  const { data: existingWorkspaces } = await supabase
+    .from('workspaces')
+    .select('id');
+  const existingIds = (existingWorkspaces || []).map(w => w.id);
+  console.log('Existing workspace IDs:', existingIds);
+  
+  // Get all workspace_members entries
+  const { data: allMembers } = await supabase
+    .from('workspace_members')
+    .select('*');
+  
+  // Find orphaned entries
+  const orphanedEntries = (allMembers || []).filter(member => 
+    !existingIds.includes(member.workspace_id)
+  );
+  console.log('Found orphaned membership entries:', orphanedEntries);
+  
+  // Delete orphaned entries
+  for (const orphan of orphanedEntries) {
+    console.log(`Deleting orphaned membership: ${orphan.id} for workspace: ${orphan.workspace_id}`);
+    const { data, error } = await supabase
+      .from('workspace_members')
+      .delete()
+      .eq('id', orphan.id);
+    
+    if (error) {
+      console.error(`Failed to delete ${orphan.id}:`, error);
+    } else {
+      console.log(`Successfully deleted ${orphan.id}:`, data);
+    }
+  }
+  
+  console.log(`Cleaned up ${orphanedEntries.length} orphaned memberships`);
+  setGlobalSnackbar({
+    open: true,
+    message: `Cleaned up ${orphanedEntries.length} orphaned membership records`,
+    severity: 'success'
+  });
+  
+  // Refresh workspaces after cleanup
+  fetchWorkspaces();
+}
+
+// Debug function to check workspace_members table
+async function debugWorkspaceMembers() {
+  console.log('=== DEBUGGING WORKSPACE MEMBERS ===');
+  console.log('Current user:', user?.email, user?.id);
+  
+  // Get ALL workspace_members entries
+  let { data: allMembers, error: allError } = await supabase
+    .from('workspace_members')
+    .select('*');
+  
+  console.log('ALL workspace_members entries:', allMembers, 'Error:', allError);
+  
+  // Filter for current user
+  const userEntries = allMembers?.filter(m => 
+    m.user_email === user?.email || m.user_id === user?.id
+  );
+  
+  console.log('Entries for current user:', userEntries);
+  
+  // Log each entry in detail
+  userEntries?.forEach((entry, index) => {
+    console.log(`Entry ${index}:`, {
+      id: entry.id,
+      workspace_id: entry.workspace_id,
+      user_email: entry.user_email,
+      user_id: entry.user_id,
+      status: entry.status,
+      invited_at: entry.invited_at,
+      accepted_at: entry.accepted_at
+    });
+  });
+  
+  // Check accepted entries (database uses 'active' for accepted)
+  const acceptedEntries = userEntries?.filter(m => m.status === 'active');
+  console.log('ACTIVE entries for current user:', acceptedEntries);
+}
+
 async function fetchWorkspaces() {
+    console.log('Fetching workspaces for user:', user?.email, user?.id);
+    
+    // Debug workspace members
+    await debugWorkspaceMembers();
+    
     // Get workspaces owned by the user
-    let { data: owned } = await supabase.from('workspaces').select('*').eq('owner_id', user.id);
+    let { data: owned, error: ownedError } = await supabase.from('workspaces').select('*').eq('owner_id', user.id);
+    console.log('Owned workspaces:', owned, 'Error:', ownedError);
     
-    // Get workspaces where user is a member (both invited and accepted)
-    let { data: memberRows } = await supabase.from('workspace_members').select('workspace_id, user_id').eq('user_email', user.email);
+    // Get workspaces where user is an ACCEPTED member - try two separate queries
+    // Note: Database uses 'active' for accepted invites, not 'accepted'
+    let { data: memberRowsByEmail, error: emailError } = await supabase
+      .from('workspace_members')
+      .select('workspace_id, user_id, status, user_email')
+      .eq('status', 'active')
+      .eq('user_email', user.email);
     
-    // Also get workspaces where user_id matches (for accepted invites)
-    let { data: acceptedMemberRows } = await supabase.from('workspace_members').select('workspace_id, user_id').eq('user_id', user.id);
+    let { data: memberRowsByUserId, error: userIdError } = await supabase
+      .from('workspace_members')
+      .select('workspace_id, user_id, status, user_email')
+      .eq('status', 'active')
+      .eq('user_id', user.id);
     
-    // Combine both sets of workspace IDs
-    const memberWorkspaceIds = [
-      ...(memberRows || []).map(wm => wm.workspace_id),
-      ...(acceptedMemberRows || []).map(wm => wm.workspace_id)
+    console.log('Member workspaces by email:', memberRowsByEmail, 'Error:', emailError);
+    console.log('Member workspaces by user_id:', memberRowsByUserId, 'Error:', userIdError);
+    
+    // Combine both member queries
+    const allMemberRows = [
+      ...(memberRowsByEmail || []),
+      ...(memberRowsByUserId || [])
     ];
     
-    // Remove duplicates
-    const uniqueWorkspaceIds = [...new Set(memberWorkspaceIds)];
+    // Get unique workspace IDs from accepted memberships
+    let memberWorkspaceIds = [...new Set(allMemberRows.map(wm => wm.workspace_id))];
+    console.log('Member workspace IDs (before filtering):', memberWorkspaceIds);
     
-    let { data: shared } = uniqueWorkspaceIds.length
-      ? await supabase.from('workspaces').select('*').in('id', uniqueWorkspaceIds)
-      : { data: [] };
+    // FILTER OUT workspace IDs that don't exist in the workspaces table
+    // We'll do this filtering in the shared workspaces query itself
+    
+    let shared = [];
+    if (memberWorkspaceIds.length > 0) {
+      console.log('Querying workspaces table for IDs:', memberWorkspaceIds);
+      
+      // First, let's see what's actually in the workspaces table
+      let { data: allWorkspaces, error: allError } = await supabase
+        .from('workspaces')
+        .select('id, name, owner_id');
+      console.log('ALL workspaces in database:', allWorkspaces, 'Error:', allError);
+      console.log('Existing workspace IDs:', (allWorkspaces || []).map(w => w.id));
+      
+      // Try direct query first (for owned workspaces or open RLS)
+      let { data: sharedData, error: sharedError } = await supabase
+        .from('workspaces')
+        .select('*')
+        .in('id', memberWorkspaceIds);
+      
+      console.log('Direct shared workspaces query result:', sharedData, 'Error:', sharedError);
+      
+      // If direct query fails due to RLS, try joining through workspace_members
+      if (!sharedData || sharedData.length === 0) {
+        console.log('Direct query returned empty, trying join through workspace_members...');
+        console.log('Join query params:', {
+          user_email: user.email,
+          status: 'active',
+          workspace_ids: memberWorkspaceIds
+        });
+        
+        let { data: joinedData, error: joinedError } = await supabase
+          .from('workspace_members')
+          .select(`
+            workspace_id,
+            workspaces (*)
+          `)
+          .eq('user_email', user.email)
+          .eq('status', 'active')
+          .in('workspace_id', memberWorkspaceIds);
+        
+        console.log('Joined query result:', joinedData, 'Error:', joinedError);
+        
+        if (joinedData) {
+          joinedData.forEach((item, index) => {
+            console.log(`Join result ${index}:`, {
+              workspace_id: item.workspace_id,
+              workspaces: item.workspaces
+            });
+          });
+        }
+        
+        // Extract workspace data from the join
+        shared = (joinedData || [])
+          .map(item => item.workspaces)
+          .filter(workspace => workspace !== null);
+        
+        console.log('Extracted shared workspaces from join:', shared);
+      } else {
+        shared = sharedData || [];
+      }
+      
+      // Check which IDs are missing
+      const foundIds = shared.map(w => w.id);
+      const missingIds = memberWorkspaceIds.filter(id => !foundIds.includes(id));
+      console.log('Missing workspace IDs (these might be RLS restricted):', missingIds);
+      console.log('Found shared workspaces:', foundIds);
+    }
+    
+    console.log('Shared workspaces:', shared);
     
     // Combine and deduplicate workspaces
-    setWorkspaces([...owned || [], ...(shared || [])].filter((wksp, idx, arr) =>
-      arr.findIndex(w => w.id === wksp.id) === idx));
+    const allWorkspaces = [...owned || [], ...shared].filter((wksp, idx, arr) =>
+      arr.findIndex(w => w.id === wksp.id) === idx);
+    
+    console.log('Final workspaces:', allWorkspaces);
+    setWorkspaces(allWorkspaces);
   }
  /* async function fetchCollaborators(workspaceId) {
   // Get all entries in workspace_members for this workspace
@@ -3987,6 +4191,7 @@ useEffect(() => {
         const { error: updateError } = await supabase
           .from('workspace_members')
           .update({ 
+            status: 'active',
             accepted_at: new Date().toISOString(),
             user_id: user.id
           })
@@ -4497,7 +4702,37 @@ useEffect(() => {
             }} />
           </Card>
           <Card className="mui-card" sx={{ mb: 4, p: 3 }}>
-            <Typography variant="h5" fontWeight={700} mb={2} color="primary">Workspaces you can access:</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Typography variant="h5" fontWeight={700} color="primary">Workspaces you can access:</Typography>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button 
+                  variant="outlined" 
+                  size="small" 
+                  onClick={fixExistingAcceptedInvites}
+                  color="success"
+                  sx={{ ml: 2 }}
+                >
+                  Fix Invites
+                </Button>
+                <Button 
+                  variant="outlined" 
+                  size="small" 
+                  onClick={cleanUpOrphanedMemberships}
+                  color="warning"
+                  sx={{ ml: 1 }}
+                >
+                  Clean Orphans
+                </Button>
+                <Button 
+                  variant="outlined" 
+                  size="small" 
+                  onClick={debugWorkspaceMembers}
+                  sx={{ ml: 1 }}
+                >
+                  Debug
+                </Button>
+              </Box>
+            </Box>
             <List>
               {workspaces.map(wksp => (
                 <ListItem key={wksp.id} sx={{ mb: 1, borderRadius: 2, boxShadow: 1, bgcolor: '#f8fafc' }}
@@ -4524,10 +4759,10 @@ useEffect(() => {
               workspaceName={workspaces.find(w => w.id === showShare)?.name || 'Workspace'}
               onShared={() => setShowShare(null)} 
               onInviteSuccess={async () => {
-                if (selectedWksp) {
-                  const updated = await fetchCollaboratorsWithPresence(selectedWksp.id);
-                  setCollaborators(updated);
-                }
+    if (selectedWksp) {
+      const updated = await fetchCollaboratorsWithPresence(selectedWksp.id);
+      setCollaborators(updated);
+    }
               }} 
             />}
           </Card>
@@ -4658,10 +4893,10 @@ useEffect(() => {
                 workspaceName={workspaces.find(w => w.id === showShare)?.name || 'Workspace'}
                 onShared={() => setShowShare(null)} 
                 onInviteSuccess={async () => {
-                  if (selectedWksp) {
-                    const updated = await fetchCollaboratorsWithPresence(selectedWksp.id);
-                    setCollaborators(updated);
-                  }
+                if (selectedWksp) {
+                  const updated = await fetchCollaboratorsWithPresence(selectedWksp.id);
+                  setCollaborators(updated);
+                }
                 }} 
               />}
             </Container>
@@ -5009,12 +5244,12 @@ useEffect(() => {
                       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
                         <Typography variant="h5" fontWeight={700}>
                           {useEnhancedIDE ? 'Enhanced AI IDE' : 'Web IDE'}
-                      </Typography>
+                           </Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                               <Typography variant="body2" color="text.secondary">
                             {useEnhancedIDE ? 'AI-Enhanced' : 'Standard'}
                               </Typography>
-                          <Button
+                           <Button 
                             variant={useEnhancedIDE ? "contained" : "outlined"}
                             onClick={() => setUseEnhancedIDE(!useEnhancedIDE)}
                             startIcon={useEnhancedIDE ? <SmartToyIcon /> : <CodeIcon />}
@@ -5026,8 +5261,8 @@ useEffect(() => {
                             }}
                           >
                             {useEnhancedIDE ? 'Enhanced' : 'Switch to AI'}
-                          </Button>
-                    </Box>
+                           </Button>
+                     </Box>
                       </Box>
 
                       <Card sx={{ p: 3, mb: 3, bgcolor: useEnhancedIDE ? '#f0f8ff' : '#f5f5f5' }}>
@@ -5153,17 +5388,17 @@ useEffect(() => {
                             }}
                           />
                         ) : (
-                          <WebIDE 
-                            selectedFile={selectedResource}
-                            onFileChange={(updatedContent) => {
-                              if (selectedResource) {
-                                const updatedFile = { ...selectedResource, notes: updatedContent };
-                                setResources(prev => prev.map(r => r.id === selectedResource.id ? updatedFile : r));
-                              }
-                            }}
-                          />
+                        <WebIDE 
+                          selectedFile={selectedResource}
+                          onFileChange={(updatedContent) => {
+                            if (selectedResource) {
+                              const updatedFile = { ...selectedResource, notes: updatedContent };
+                              setResources(prev => prev.map(r => r.id === selectedResource.id ? updatedFile : r));
+                            }
+                          }}
+                        />
                         )}
-                          </Card>
+                      </Card>
                     </Box>
                   )}
 

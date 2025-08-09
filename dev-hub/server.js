@@ -107,6 +107,40 @@ app.post('/api/invite', async (req, res) => {
       return res.status(400).json({ error: 'Workspace not found' });
     }
 
+    // Check if user is already invited or a member
+    const { data: existingMember, error: memberCheckError } = await supabase
+      .from('workspace_members')
+      .select('id, status')
+      .eq('workspace_id', workspace_id)
+      .eq('user_email', email)
+      .single();
+
+    if (existingMember) {
+      if (existingMember.status === 'accepted') {
+        return res.status(400).json({ error: 'User is already a member of this workspace' });
+      } else if (existingMember.status === 'pending') {
+        return res.status(400).json({ error: 'User has already been invited to this workspace' });
+      }
+    }
+
+    // Create workspace_members record for the invitation
+    const { error: inviteError } = await supabase
+      .from('workspace_members')
+      .insert({
+        workspace_id: workspace_id,
+        user_email: email,
+        status: 'pending',
+        invited_by: inviter_id,
+        invited_at: new Date().toISOString()
+      });
+
+    if (inviteError) {
+      console.error('Error creating workspace invitation:', inviteError);
+      return res.status(500).json({ error: 'Failed to create workspace invitation' });
+    }
+
+    console.log('Workspace invitation created in database for:', email);
+
     // Send email notification
     const emailSubject = `You've been invited to join "${workspace.name}" workspace!`;
     const emailHtml = `
@@ -240,38 +274,12 @@ This invitation was sent from DevHub Workspace
   }
 });
 
-// Accept invite endpoint
-app.post('/api/accept-invite', async (req, res) => {
-  const { workspace_id, user_email, user_id } = req.body;
-
-  try {
-    // Update the membership to mark as accepted
-    const { error: updateError } = await supabase
-      .from('workspace_members')
-      .update({ 
-        accepted_at: new Date().toISOString(),
-        user_id: user_id
-      })
-      .eq('workspace_id', workspace_id)
-      .eq('user_email', user_email);
-
-    if (updateError) {
-      console.error('Accept invite error:', updateError);
-      return res.status(400).json({ error: updateError.message });
-    }
-
-    console.log('Invite accepted successfully');
-    return res.status(200).json({ 
-      ok: true, 
-      msg: "Successfully joined workspace",
-      workspace_id: workspace_id
-    });
-
-  } catch (error) {
-    console.error('Accept invite error:', error);
-    return res.status(500).json({ error: 'Failed to accept invite' });
-  }
-});
+// NOTE: Accept invite endpoint is handled by Next.js API route at pages/api/accept-invite.js
+// Commenting out to avoid conflicts and duplicate entries
+// 
+// app.post('/api/accept-invite', async (req, res) => {
+//   ... endpoint moved to pages/api/accept-invite.js
+// });
 
 app.listen(PORT, () => {
   console.log(`Email server running on http://localhost:${PORT}`);
