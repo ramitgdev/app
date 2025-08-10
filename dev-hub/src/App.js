@@ -2136,12 +2136,27 @@ export default function App() {
   const [googleToken, setGoogleToken] = useState(null);
   const loginWithGoogle = useGoogleLogin({
     scope: 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.file',
+    prompt: 'consent', // Force consent screen to show every time
+    access_type: 'offline', // Get refresh token
     onSuccess: (tokenResponse) => {
+      console.log('Google login successful, token received with scopes:', tokenResponse.scope);
       setGoogleToken(tokenResponse.access_token);
+      // Clear any old cached tokens
+      localStorage.removeItem('google_oauth_token');
+      sessionStorage.removeItem('google_oauth_token');
+      setGlobalSnackbar({
+        open: true,
+        message: 'Google authentication successful! You can now access Google Drive.',
+        severity: 'success'
+      });
     },
     onError: (error) => {
       console.error("Google login error:", error);
-      alert("Google login failed. For now, you can view Google Docs by clicking 'Open in Google Docs' link below.");
+      setGlobalSnackbar({
+        open: true,
+        message: "Google login failed. Please try again.",
+        severity: 'error'
+      });
       setGoogleToken(null);
     }
   });
@@ -5279,7 +5294,9 @@ useEffect(() => {
                        {/* Google Drive Picker */}
                        <GoogleDrivePicker
                          googleToken={googleToken}
+                         setGoogleToken={setGoogleToken}
                          setGlobalSnackbar={setGlobalSnackbar}
+                         loginWithGoogle={loginWithGoogle}
                          onFileSelect={(file) => {
                            // Handle file selection - could open in appropriate editor
                            if (file.mimeType && file.mimeType.includes('document')) {
