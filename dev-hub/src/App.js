@@ -80,6 +80,7 @@ import GoogleSlidesEditor from './GoogleSlidesEditor';
 import FlowchartEditor from './FlowchartEditor';
 import CanvaEditor from './CanvaEditor';
 import GoogleDriveInterface from './GoogleDriveInterface';
+import GoogleDrivePicker from './GoogleDrivePicker';
 
 import { llmIntegration } from './llm-integration';
 
@@ -5273,28 +5274,44 @@ useEffect(() => {
 
                    {activeDevelopmentTab === 'gdrive' && (
                      <Box>
-                       <Typography variant="h5" fontWeight={700} mb={3}>Google Drive Management</Typography>
+                       <Typography variant="h5" fontWeight={700} mb={3}>Google Drive Integration</Typography>
                        
-                       {/* Google Drive Interface */}
-                       <GoogleDriveInterface
+                       {/* Google Drive Picker */}
+                       <GoogleDrivePicker
                          googleToken={googleToken}
+                         setGlobalSnackbar={setGlobalSnackbar}
                          onFileSelect={(file) => {
                            // Handle file selection - could open in appropriate editor
-                           if (file.mimeType.includes('document')) {
-                             setGoogleDocUrl(`https://docs.google.com/document/d/${file.id}/edit`);
+                           if (file.mimeType && file.mimeType.includes('document')) {
+                             // For Google Docs, open in the Google Docs tab
+                             const docUrl = `https://docs.google.com/document/d/${file.id}/edit`;
+                             setGoogleDocUrl(docUrl);
                              setActiveDevelopmentTab('gdocs');
-                           } else if (file.mimeType.includes('spreadsheet')) {
-                             // Could add spreadsheet editor support
                              setGlobalSnackbar({
                                open: true,
-                               message: `Opened ${file.name}`,
+                               message: `Opening ${file.name} in Google Docs editor`,
+                               severity: 'success'
+                             });
+                           } else if (file.mimeType && file.mimeType.includes('spreadsheet')) {
+                             // For Google Sheets, could add spreadsheet editor support
+                             setGlobalSnackbar({
+                               open: true,
+                               message: `Selected Google Sheet: ${file.name}`,
                                severity: 'info'
                              });
-                           } else if (file.mimeType.includes('presentation')) {
-                             // Could add presentation editor support
+                           } else if (file.mimeType && file.mimeType.includes('presentation')) {
+                             // For Google Slides, could add presentation editor support
                              setGlobalSnackbar({
                                open: true,
-                               message: `Opened ${file.name}`,
+                               message: `Selected Google Slides: ${file.name}`,
+                               severity: 'info'
+                             });
+                           } else if (file.downloadUrl) {
+                             // For other files, open download URL
+                             window.open(file.downloadUrl, '_blank');
+                             setGlobalSnackbar({
+                               open: true,
+                               message: `Opening ${file.name} in new tab`,
                                severity: 'info'
                              });
                            } else {
@@ -5304,10 +5321,6 @@ useEffect(() => {
                                severity: 'info'
                              });
                            }
-                         }}
-                         onFolderOpen={(folder) => {
-                           // Handle folder navigation
-                           console.log('Opening folder:', folder);
                          }}
                        />
                      </Box>
