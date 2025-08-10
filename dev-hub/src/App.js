@@ -79,6 +79,7 @@ import { GitHubAPI, sanitizeRepoName, convertFilesToGitHubFormat, validateGitHub
 import GoogleSlidesEditor from './GoogleSlidesEditor';
 import FlowchartEditor from './FlowchartEditor';
 import CanvaEditor from './CanvaEditor';
+import GoogleDriveInterface from './GoogleDriveInterface';
 
 import { llmIntegration } from './llm-integration';
 
@@ -408,7 +409,7 @@ window.onunhandledrejection = (event) => {
 
 // Handler to invoke GIS sign-in popup and store token
 const loginWithGoogle = useGoogleLogin({
-  scope: 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file',
+  scope: 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.file',
   flow: 'implicit',
   onSuccess: (tokenResponse) => {
     setGoogleToken(tokenResponse.access_token); // save it for Docs API use
@@ -1094,6 +1095,15 @@ function isCanvaResource(ref) {
 function isLucidchartResource(ref) {
   return typeof ref.url === "string" && ref.url.startsWith("lucidchart://") || 
          (ref.type && ref.type === 'lucidchart');
+}
+
+function isGoogleDriveResource(ref) {
+  return ref && ref.url && (
+    ref.url.includes('drive.google.com') || 
+    ref.url.includes('docs.google.com') || 
+    ref.url.includes('sheets.google.com') || 
+    ref.url.includes('slides.google.com')
+  );
 }
 
 function extractGitHubInfo(url) {
@@ -2124,7 +2134,7 @@ export default function App() {
   const [collaborators, setCollaborators] = useState({members: [], ownerId: null, users: []});  
   const [googleToken, setGoogleToken] = useState(null);
   const loginWithGoogle = useGoogleLogin({
-    scope: 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive.file',
+    scope: 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.file',
     onSuccess: (tokenResponse) => {
       setGoogleToken(tokenResponse.access_token);
     },
@@ -2377,6 +2387,8 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
         if (googleDocContext) {
           context += `Full Google Doc content:\n\`\`\`\n${googleDocContext.content}\n\`\`\`\n\n`;
         }
+      } else if (activeDevelopmentTab === 'gdrive') {
+        context += `User is in Google Drive management interface. Google authentication: ${googleToken ? 'Connected' : 'Not connected'}. `;
       } else if (activeDevelopmentTab === 'hackathon') {
         context += `User is in the Hackathon AI assistant. `;
       }
@@ -2507,6 +2519,13 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
         (inputText.includes('write') && inputText.includes('google doc')) ||
         (inputText.includes('insert') && inputText.includes('doc'))) {
       return 'gdocs';
+    }
+    
+    // Google Drive operations - detect "google drive" requests
+    if (inputText.includes('google drive') || inputText.includes('drive.google.com') || 
+        inputText.includes('upload to drive') || inputText.includes('save to drive') ||
+        inputText.includes('create folder') || inputText.includes('organize files')) {
+      return 'gdrive';
     }
     
     // Switch to IDE if providing code suggestions
@@ -3000,7 +3019,10 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
   };
 
   const getGlobalWorkspaceContext = () => {
-    return `Workspace has ${folders.length} folders and ${resources.length} files. Active folder: ${folders.find(f => f.id === activeFolder)?.text || 'Root'}`;
+    const googleDriveResources = resources.filter(r => isGoogleDriveResource(r));
+    const googleDocResources = resources.filter(r => isGoogleDocResource(r));
+    
+    return `Workspace has ${folders.length} folders and ${resources.length} files. Active folder: ${folders.find(f => f.id === activeFolder)?.text || 'Root'}. Google Drive resources: ${googleDriveResources.length}, Google Docs: ${googleDocResources.length}. Google authentication: ${googleToken ? 'Connected' : 'Not connected'}`;
   };
 
   // Get current Google Doc content if available
@@ -4355,7 +4377,7 @@ useEffect(() => {
     setSelectedResource(result);
     
     // Check if it's a GitHub file and open in GitHub editor
-    if (isGitHubResource(result)) {
+    if (isGitHubResource(result) && result.url) {
       const githubInfo = extractGitHubInfo(result.url);
       if (githubInfo) {
         setGithubRepo(githubInfo.repoFullName);
@@ -4366,9 +4388,20 @@ useEffect(() => {
     }
     
     // Check if it's a Google Doc and open in Google Docs editor
-    if (isGoogleDocResource(result)) {
+    if (isGoogleDocResource(result) && result.url) {
       setGoogleDocUrl(result.url);
       setActiveDevelopmentTab('gdocs');
+      return;
+    }
+    
+    // Check if it's a Google Drive resource and open in Google Drive tab
+    if (isGoogleDriveResource(result) && result.url) {
+      setActiveDevelopmentTab('gdrive');
+      setGlobalSnackbar({
+        open: true,
+        message: `Opening Google Drive resource: ${result.title}`,
+        severity: 'info'
+      });
       return;
     }
     
@@ -5104,6 +5137,7 @@ useEffect(() => {
                 <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#fff' }}>
                   <Tabs value={activeDevelopmentTab} onChange={(_, v) => setActiveDevelopmentTab(v)}>
                     <Tab label="Google Docs" value="gdocs" />
+                    <Tab label="Google Drive" value="gdrive" />
                     <Tab label="Web IDE" value="web-ide" />
                     <Tab label="Resources" value="resources" />
                     <Tab label="Search" value="search" />
@@ -5237,7 +5271,47 @@ useEffect(() => {
                      </Box>
                    )}
 
-
+                   {activeDevelopmentTab === 'gdrive' && (
+                     <Box>
+                       <Typography variant="h5" fontWeight={700} mb={3}>Google Drive Management</Typography>
+                       
+                       {/* Google Drive Interface */}
+                       <GoogleDriveInterface
+                         googleToken={googleToken}
+                         onFileSelect={(file) => {
+                           // Handle file selection - could open in appropriate editor
+                           if (file.mimeType.includes('document')) {
+                             setGoogleDocUrl(`https://docs.google.com/document/d/${file.id}/edit`);
+                             setActiveDevelopmentTab('gdocs');
+                           } else if (file.mimeType.includes('spreadsheet')) {
+                             // Could add spreadsheet editor support
+                             setGlobalSnackbar({
+                               open: true,
+                               message: `Opened ${file.name}`,
+                               severity: 'info'
+                             });
+                           } else if (file.mimeType.includes('presentation')) {
+                             // Could add presentation editor support
+                             setGlobalSnackbar({
+                               open: true,
+                               message: `Opened ${file.name}`,
+                               severity: 'info'
+                             });
+                           } else {
+                             setGlobalSnackbar({
+                               open: true,
+                               message: `Selected ${file.name}`,
+                               severity: 'info'
+                             });
+                           }
+                         }}
+                         onFolderOpen={(folder) => {
+                           // Handle folder navigation
+                           console.log('Opening folder:', folder);
+                         }}
+                       />
+                     </Box>
+                   )}
 
                   {activeDevelopmentTab === 'web-ide' && (
                     <Box>
@@ -5447,23 +5521,27 @@ useEffect(() => {
                             <Card sx={{ p: 2, height: '100%' }}>
                               <Stack direction="row" alignItems="center" spacing={1} mb={1}>
                                 <InsertDriveFileIcon color="warning" />
-                                <Typography variant="h6" fontWeight={600} sx={{ flex: 1 }}>{ref.title}</Typography>
+                                <Typography variant="h6" fontWeight={600} sx={{ flex: 1 }}>{ref.title || 'Untitled'}</Typography>
                                 <IconButton size="small" onClick={() => editResource(ref)}><EditIcon /></IconButton>
                                 <IconButton size="small" sx={{ color: 'error.main' }} onClick={() => removeResource(ref.id)}><DeleteIcon /></IconButton>
                               </Stack>
                               <Typography variant="body2" color="primary.main" mb={1}>
-                                <a href={ref.url.match(/^https?:\/\//) ? ref.url : `https://${ref.url}`} target="_blank" rel="noopener noreferrer">
-                                  {ref.url}
-                                </a>
+                                {ref.url ? (
+                                  <a href={ref.url.match(/^https?:\/\//) ? ref.url : `https://${ref.url}`} target="_blank" rel="noopener noreferrer">
+                                    {ref.url}
+                                  </a>
+                                ) : (
+                                  <span>No URL available</span>
+                                )}
                               </Typography>
                               <Typography variant="body2" color="text.secondary" mb={1}>
-                                Platform: {ref.platform}
+                                Platform: {ref.platform || 'Not specified'}
                               </Typography>
                               <Typography variant="body2" color="text.secondary" mb={1}>
-                                Tags: {Array.isArray(ref.tags) ? ref.tags.join(", ") : ref.tags}
+                                Tags: {Array.isArray(ref.tags) ? ref.tags.join(", ") : (ref.tags || 'No tags')}
                               </Typography>
                               <Typography variant="body2" color="text.secondary">
-                                {ref.notes}
+                                {ref.notes || 'No notes'}
                               </Typography>
                               
                               {isGoogleDocResource(ref) && (
@@ -5548,22 +5626,25 @@ useEffect(() => {
                                         ) : (
                                           <InsertDriveFileIcon color="warning" />
                                         )}
-                                        <Typography variant="h6" fontWeight={600} sx={{ flex: 1 }}>{result.title}</Typography>
+                                        <Typography variant="h6" fontWeight={600} sx={{ flex: 1 }}>{result.title || 'Untitled'}</Typography>
                                       </Stack>
                                       <Typography variant="body2" color="primary.main" mb={1}>
-                                        {result.url && (result.url.match(/^https?:\/\//)
-                                          ? <a href={result.url} target="_blank" rel="noopener noreferrer">{result.url}</a>
-                                          : <span>{result.url}</span>
+                                        {result.url ? (
+                                          result.url.match(/^https?:\/\//)
+                                            ? <a href={result.url} target="_blank" rel="noopener noreferrer">{result.url}</a>
+                                            : <span>{result.url}</span>
+                                        ) : (
+                                          <span>No URL available</span>
                                         )}
                                       </Typography>
                                       <Typography variant="body2" color="text.secondary" mb={1}>
-                                        Platform: {result.platform}
+                                        Platform: {result.platform || 'Not specified'}
                                       </Typography>
                                       <Typography variant="body2" color="text.secondary" mb={1}>
-                                        Tags: {Array.isArray(result.tags) ? result.tags.join(", ") : result.tags}
+                                        Tags: {Array.isArray(result.tags) ? result.tags.join(", ") : (result.tags || 'No tags')}
                                       </Typography>
                                       <Typography variant="body2" color="text.secondary">
-                                        {result.notes}
+                                        {result.notes || 'No notes'}
                                       </Typography>
                                       {isGoogleDocResource(result) && (
                                         <Box sx={{ mt: 2, p: 1, bgcolor: '#f7fafd', borderRadius: 1 }}>
