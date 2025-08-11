@@ -46,7 +46,7 @@ export default async function handler(req, res) {
     const { data: updatedMember, error: updateError } = await supabaseAdmin
       .from('workspace_members')
       .update({ 
-        status: 'accepted',
+        status: 'active',
         accepted_at: new Date().toISOString(),
         user_id: user_id
       })

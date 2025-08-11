@@ -116,7 +116,7 @@ app.post('/api/invite', async (req, res) => {
       .single();
 
     if (existingMember) {
-      if (existingMember.status === 'accepted') {
+      if (existingMember.status === 'active') {
         return res.status(400).json({ error: 'User is already a member of this workspace' });
       } else if (existingMember.status === 'pending') {
         return res.status(400).json({ error: 'User has already been invited to this workspace' });

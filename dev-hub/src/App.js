@@ -4549,7 +4549,12 @@ useEffect(() => {
     let interval;
     async function updatePresence() {
       if (!user) return;
-      await supabase.from('user_presence').upsert({ user_id: user.id, last_seen: new Date().toISOString() });
+      await supabase
+        .from('user_presence')
+        .upsert(
+          { user_id: user.id, last_seen: new Date().toISOString() },
+          { onConflict: 'user_id' }
+        );
     }
     if (user) {
       updatePresence();

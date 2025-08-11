@@ -118,7 +118,7 @@ export const acceptWorkspaceInvitation = async (workspaceId) => {
     const { data, error } = await supabase
       .from('workspace_members')
       .update({
-        status: 'accepted',
+        status: 'active',
         accepted_at: new Date().toISOString(),
         user_id: user.user.id
       })
@@ -159,7 +159,7 @@ export const getUserWorkspaces = async () => {
         )
       `)
       .or(`owner_id.eq.${user.user.id},workspace_members.user_id.eq.${user.user.id}`)
-      .eq('workspace_members.status', 'accepted');
+      .eq('workspace_members.status', 'active');
 
     if (error) throw error;
     
@@ -188,7 +188,7 @@ export const getWorkspaceCollaborators = async (workspaceId) => {
         )
       `)
       .eq('workspace_id', workspaceId)
-      .eq('status', 'accepted');
+      .eq('status', 'active');
 
     if (error) throw error;
     
