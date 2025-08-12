@@ -189,6 +189,362 @@ function EmbeddedGoogleDocsEditor({ docUrl, googleToken, onExit }) {
   );
 }
 
+// Embedded Google Sheets Editor Component
+function EmbeddedGoogleSheetsEditor({ sheetUrl, googleToken, onExit }) {
+  const [sheetId, setSheetId] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!sheetUrl || !googleToken) return;
+    setLoading(true);
+    setError('');
+    const match = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (!match) {
+      setError('Invalid Google Sheet URL');
+      setLoading(false);
+      return;
+    }
+    setSheetId(match[1]);
+    setLoading(false);
+  }, [sheetUrl, googleToken]);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+        <Typography>Loading Google Sheets...</Typography>
+      </Box>
+    );
+  }
+  if (error) {
+    return (
+      <Box sx={{ p: 2, color: 'error.main' }}>
+        <Typography>{error}</Typography>
+      </Box>
+    );
+  }
+  if (!sheetId) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+        <Typography>Please enter a valid Google Sheet URL</Typography>
+      </Box>
+    );
+  }
+  return (
+    <Box sx={{ height: 600, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 2, bgcolor: '#f8f9fa', borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h6" fontWeight={600}>
+          Google Sheets Editor
+        </Typography>
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" onClick={() => window.open(`https://docs.google.com/spreadsheets/d/${sheetId}/edit`, '_blank')}>
+            Open in New Tab
+          </Button>
+          <Button variant="outlined" onClick={onExit}>Exit</Button>
+        </Stack>
+      </Box>
+      <Box sx={{ flex: 1, border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+        <iframe
+          src={`https://docs.google.com/spreadsheets/d/${sheetId}/edit?usp=sharing`}
+          width="100%"
+          height="100%"
+          style={{ border: 'none' }}
+          allowFullScreen
+          title="Google Sheets Editor"
+        />
+      </Box>
+    </Box>
+  );
+}
+
+// Embedded Google Slides Editor Component
+function EmbeddedGoogleSlidesEditor({ slidesUrl, googleToken, onExit }) {
+  const [presentationId, setPresentationId] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!slidesUrl || !googleToken) return;
+    setLoading(true);
+    setError('');
+    const match = slidesUrl.match(/\/presentation\/d\/([a-zA-Z0-9-_]+)/);
+    if (!match) {
+      setError('Invalid Google Slides URL');
+      setLoading(false);
+      return;
+    }
+    setPresentationId(match[1]);
+    setLoading(false);
+  }, [slidesUrl, googleToken]);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+        <Typography>Loading Google Slides...</Typography>
+      </Box>
+    );
+  }
+  if (error) {
+    return (
+      <Box sx={{ p: 2, color: 'error.main' }}>
+        <Typography>{error}</Typography>
+      </Box>
+    );
+  }
+  if (!presentationId) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+        <Typography>Please enter a valid Google Slides URL</Typography>
+      </Box>
+    );
+  }
+  return (
+    <Box sx={{ height: 600, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 2, bgcolor: '#f8f9fa', borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h6" fontWeight={600}>
+          Google Slides Editor
+        </Typography>
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" onClick={() => window.open(`https://docs.google.com/presentation/d/${presentationId}/edit`, '_blank')}>
+            Open in New Tab
+          </Button>
+          <Button variant="outlined" onClick={onExit}>Exit</Button>
+        </Stack>
+      </Box>
+      <Box sx={{ flex: 1, border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+        <iframe
+          src={`https://docs.google.com/presentation/d/${presentationId}/edit?usp=sharing`}
+          width="100%"
+          height="100%"
+          style={{ border: 'none' }}
+          allowFullScreen
+          title="Google Slides Editor"
+        />
+      </Box>
+    </Box>
+  );
+}
+
+// Embedded Google Drawings Editor Component
+function EmbeddedGoogleDrawingsEditor({ drawingUrl, googleToken, onExit }) {
+  const [drawingId, setDrawingId] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!drawingUrl || !googleToken) return;
+    setLoading(true);
+    setError('');
+    const match = drawingUrl.match(/\/drawings\/d\/([a-zA-Z0-9-_]+)/);
+    if (!match) {
+      setError('Invalid Google Drawing URL');
+      setLoading(false);
+      return;
+    }
+    setDrawingId(match[1]);
+    setLoading(false);
+  }, [drawingUrl, googleToken]);
+
+  if (loading) return (<Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}><Typography>Loading Google Drawing...</Typography></Box>);
+  if (error) return (<Box sx={{ p: 2, color: 'error.main' }}><Typography>{error}</Typography></Box>);
+  if (!drawingId) return (<Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}><Typography>Please enter a valid Google Drawing URL</Typography></Box>);
+
+  return (
+    <Box sx={{ height: 600, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 2, bgcolor: '#f8f9fa', borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h6" fontWeight={600}>Google Drawings Editor</Typography>
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" onClick={() => window.open(`https://docs.google.com/drawings/d/${drawingId}/edit`, '_blank')}>Open in New Tab</Button>
+          <Button variant="outlined" onClick={onExit}>Exit</Button>
+        </Stack>
+      </Box>
+      <Box sx={{ flex: 1, border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+        <iframe
+          src={`https://docs.google.com/drawings/d/${drawingId}/edit?usp=sharing`}
+          width="100%"
+          height="100%"
+          style={{ border: 'none' }}
+          allowFullScreen
+          title="Google Drawings Editor"
+        />
+      </Box>
+    </Box>
+  );
+}
+
+// Embedded Google Sites Viewer
+function EmbeddedGoogleSitesViewer({ siteUrl, onExit }) {
+  const [authUserIndex, setAuthUserIndex] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0);
+  if (!siteUrl) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+        <Typography>Please enter a valid Google Sites URL</Typography>
+      </Box>
+    );
+  }
+  const urlWithAuth = siteUrl.includes('authuser=') ? siteUrl : (siteUrl + (siteUrl.includes('?') ? `&authuser=${authUserIndex}` : `?authuser=${authUserIndex}`));
+  return (
+    <Box sx={{ height: 600, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 2, bgcolor: '#f8f9fa', borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h6" fontWeight={600}>Google Sites</Typography>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Typography variant="caption" color="text.secondary">Account</Typography>
+          <TextField size="small" value={authUserIndex} onChange={(e) => setAuthUserIndex(Number(e.target.value) || 0)} select sx={{ width: 88 }}>
+            {[0,1,2,3].map(idx => (<MenuItem key={idx} value={idx}>{`authuser=${idx}`}</MenuItem>))}
+          </TextField>
+          <Button variant="outlined" onClick={() => setReloadKey(k => k + 1)}>Reload</Button>
+          <Button variant="outlined" onClick={() => window.open(urlWithAuth, '_blank')}>Open in New Tab</Button>
+          <Button variant="outlined" onClick={onExit}>Exit</Button>
+        </Stack>
+      </Box>
+      <Box sx={{ flex: 1, border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+        <iframe key={reloadKey} src={urlWithAuth} width="100%" height="100%" style={{ border: 'none' }} title="Google Sites" />
+      </Box>
+      <Typography variant="body2" color="text.secondary" sx={{ p: 1 }}>
+        If editing is blocked in the embed, use "Open in New Tab" to edit with your full Google session.
+      </Typography>
+    </Box>
+  );
+}
+
+// Embedded Looker Studio Viewer
+function EmbeddedLookerStudioViewer({ reportUrl, onExit }) {
+  const [authUserIndex, setAuthUserIndex] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0);
+  if (!reportUrl) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+        <Typography>Please enter a valid Looker Studio URL</Typography>
+      </Box>
+    );
+  }
+  const toEmbedUrl = (url) => {
+    try {
+      const u = new URL(url);
+      if (u.hostname.includes('lookerstudio.google.com')) {
+        if (!u.pathname.includes('/embed/')) {
+          u.pathname = u.pathname.replace('/reporting/', '/embed/reporting/');
+        }
+        if (!u.searchParams.has('authuser')) u.searchParams.set('authuser', String(authUserIndex));
+        return u.toString();
+      }
+    } catch {}
+    return url;
+  };
+  const embedUrl = toEmbedUrl(reportUrl);
+  const newTabUrl = reportUrl.includes('authuser=') ? reportUrl : (reportUrl + (reportUrl.includes('?') ? `&authuser=${authUserIndex}` : `?authuser=${authUserIndex}`));
+  return (
+    <Box sx={{ height: 600, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 2, bgcolor: '#f8f9fa', borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h6" fontWeight={600}>Looker Studio</Typography>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Typography variant="caption" color="text.secondary">Account</Typography>
+          <TextField size="small" value={authUserIndex} onChange={(e) => setAuthUserIndex(Number(e.target.value) || 0)} select sx={{ width: 88 }}>
+            {[0,1,2,3].map(idx => (<MenuItem key={idx} value={idx}>{`authuser=${idx}`}</MenuItem>))}
+          </TextField>
+          <Button variant="outlined" onClick={() => setReloadKey(k => k + 1)}>Reload</Button>
+          <Button variant="outlined" onClick={() => window.open(newTabUrl, '_blank')}>Open in New Tab</Button>
+          <Button variant="outlined" onClick={onExit}>Exit</Button>
+        </Stack>
+      </Box>
+      <Box sx={{ flex: 1, border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+        <iframe key={reloadKey} src={embedUrl} width="100%" height="100%" style={{ border: 'none' }} title="Looker Studio" />
+      </Box>
+      <Typography variant="body2" color="text.secondary" sx={{ p: 1 }}>
+        Editing Looker Studio reports is not supported in iframes. Use "Open in New Tab" to edit.
+      </Typography>
+    </Box>
+  );
+}
+
+// Embedded Google Forms Editor Component
+function EmbeddedGoogleFormsEditor({ formUrl, googleToken, onExit }) {
+  const [formId, setFormId] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [authUserIndex, setAuthUserIndex] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    if (!formUrl || !googleToken) return;
+    setLoading(true);
+    setError('');
+    const match = formUrl.match(/\/forms\/d\/([a-zA-Z0-9-_]+)/);
+    if (!match) {
+      setError('Invalid Google Form URL');
+      setLoading(false);
+      return;
+    }
+    setFormId(match[1]);
+    setLoading(false);
+  }, [formUrl, googleToken]);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+        <Typography>Loading Google Form...</Typography>
+      </Box>
+    );
+  }
+  if (error) {
+    return (
+      <Box sx={{ p: 2, color: 'error.main' }}>
+        <Typography>{error}</Typography>
+      </Box>
+    );
+  }
+  if (!formId) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
+        <Typography>Please enter a valid Google Form URL</Typography>
+      </Box>
+    );
+  }
+  return (
+    <Box sx={{ height: 600, display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 2, bgcolor: '#f8f9fa', borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h6" fontWeight={600}>
+          Google Forms Editor
+        </Typography>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Typography variant="caption" color="text.secondary">Account</Typography>
+          <TextField
+            size="small"
+            value={authUserIndex}
+            onChange={(e) => setAuthUserIndex(Number(e.target.value) || 0)}
+            select
+            sx={{ width: 88 }}
+          >
+            {[0,1,2,3].map(idx => (
+              <MenuItem key={idx} value={idx}>{`authuser=${idx}`}</MenuItem>
+            ))}
+          </TextField>
+          <Button variant="outlined" onClick={() => setReloadKey(k => k + 1)}>Reload</Button>
+          <Button variant="outlined" onClick={() => window.open(`https://docs.google.com/forms/d/${formId}/edit?authuser=${authUserIndex}`, '_blank')}>
+            Open in New Tab
+          </Button>
+          <Button variant="outlined" onClick={onExit}>Exit</Button>
+        </Stack>
+      </Box>
+      <Box sx={{ flex: 1, border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+        <iframe
+          key={reloadKey}
+          src={`https://docs.google.com/forms/d/${formId}/edit?usp=sharing&authuser=${authUserIndex}`}
+          width="100%"
+          height="100%"
+          style={{ border: 'none' }}
+          allowFullScreen
+          title="Google Forms Editor"
+        />
+      </Box>
+      <Typography variant="body2" color="text.secondary" sx={{ p: 1 }}>
+        If you see "You need access", try changing the account selector above. Some browsers block third-party cookies; opening in a new tab will also use your signed-in Google session.
+      </Typography>
+    </Box>
+  );
+}
+
 // Local GitHub Editor Component
 function LocalGitHubEditor({ repoFullName, filePath, githubToken, onExit }) {
   const [content, setContent] = useState('');
@@ -2135,7 +2491,7 @@ export default function App() {
   const [collaborators, setCollaborators] = useState({members: [], ownerId: null, users: []});  
   const [googleToken, setGoogleToken] = useState(null);
   const loginWithGoogle = useGoogleLogin({
-    scope: 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.file',
+    scope: 'https://www.googleapis.com/auth/documents https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/presentations https://www.googleapis.com/auth/forms.body https://www.googleapis.com/auth/forms.body.readonly https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/drive.file',
     prompt: 'consent', // Force consent screen to show every time
     access_type: 'offline', // Get refresh token
     onSuccess: (tokenResponse) => {
@@ -2185,6 +2541,114 @@ export default function App() {
   const [githubRepo, setGithubRepo] = useState('');
   const [githubFile, setGithubFile] = useState('');
   const [googleDocUrl, setGoogleDocUrl] = useState('');
+  const [googleSheetUrl, setGoogleSheetUrl] = useState('');
+  const [googleSlidesUrl, setGoogleSlidesUrl] = useState('');
+  const [googleFormUrl, setGoogleFormUrl] = useState('');
+  const [googleDrawingUrl, setGoogleDrawingUrl] = useState('');
+  const [googleSiteUrl, setGoogleSiteUrl] = useState('');
+  const [lookerStudioUrl, setLookerStudioUrl] = useState('');
+  const [showGoogleSiteDialog, setShowGoogleSiteDialog] = useState(false);
+  const [newGoogleSiteTitle, setNewGoogleSiteTitle] = useState('');
+  const [isCreatingGoogleSite, setIsCreatingGoogleSite] = useState(false);
+  const [showLookerReportDialog, setShowLookerReportDialog] = useState(false);
+  const [newLookerReportTitle, setNewLookerReportTitle] = useState('');
+  const [isCreatingLookerReport, setIsCreatingLookerReport] = useState(false);
+  // Google Sheets creation state
+  const [showGoogleSheetDialog, setShowGoogleSheetDialog] = useState(false);
+  const [newGoogleSheetTitle, setNewGoogleSheetTitle] = useState('');
+  const [isCreatingGoogleSheet, setIsCreatingGoogleSheet] = useState(false);
+  // Google Slides creation state
+  const [showGoogleSlidesDialog, setShowGoogleSlidesDialog] = useState(false);
+  const [newGoogleSlidesTitle, setNewGoogleSlidesTitle] = useState('');
+  const [isCreatingGoogleSlides, setIsCreatingGoogleSlides] = useState(false);
+  // Google Forms creation state
+  const [showGoogleFormDialog, setShowGoogleFormDialog] = useState(false);
+  const [newGoogleFormTitle, setNewGoogleFormTitle] = useState('');
+  const [isCreatingGoogleForm, setIsCreatingGoogleForm] = useState(false);
+  // Google Drawings creation state
+  const [showGoogleDrawingDialog, setShowGoogleDrawingDialog] = useState(false);
+  const [newGoogleDrawingTitle, setNewGoogleDrawingTitle] = useState('');
+  const [isCreatingGoogleDrawing, setIsCreatingGoogleDrawing] = useState(false);
+
+  // Google Drawings creation function (Drive)
+  const createNewGoogleDrawing = async (title) => {
+    if (!googleToken) {
+      setGlobalSnackbar({ open: true, message: 'Please sign in to Google first to create a Google Drawing.', severity: 'error' });
+      return;
+    }
+    setIsCreatingGoogleDrawing(true);
+    try {
+      const driveRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${googleToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: title || `New Drawing ${new Date().toLocaleString()}`,
+          mimeType: 'application/vnd.google-apps.drawing'
+        })
+      });
+      if (!driveRes.ok) {
+        const driveTxt = await driveRes.text();
+        throw new Error(driveTxt);
+      }
+      const created = await driveRes.json();
+      const url = `https://docs.google.com/drawings/d/${created.id}/edit`;
+      setGoogleDrawingUrl(url);
+      setActiveDevelopmentTab('gdrawings');
+      setShowGoogleDrawingDialog(false);
+      setNewGoogleDrawingTitle('');
+      setGlobalSnackbar({ open: true, message: 'Google Drawing created and opened.', severity: 'success' });
+    } catch (e) {
+      console.error('Create Drawing failed:', e);
+      setGlobalSnackbar({ open: true, message: 'Failed to create Google Drawing.', severity: 'error' });
+    } finally {
+      setIsCreatingGoogleDrawing(false);
+    }
+  };
+
+  // Google Sites creation (Drive placeholder, Sites API creation not available via public REST; create a folder or shortcut)
+  const createNewGoogleSite = async (title) => {
+    setIsCreatingGoogleSite(true);
+    try {
+      // Best-effort placeholder: create a Drive shortcut to Sites home or create a folder with the site title
+      const name = title || `New Site ${new Date().toLocaleString()}`;
+      const driveRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${googleToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder' })
+      });
+      if (!driveRes.ok) throw new Error(await driveRes.text());
+      // Open Sites editor home with prefilled name (no official deep-link for new site with title)
+      const url = 'https://sites.google.com/new';
+      setGoogleSiteUrl(url);
+      setActiveDevelopmentTab('gsites');
+      setShowGoogleSiteDialog(false);
+      setNewGoogleSiteTitle('');
+      setGlobalSnackbar({ open: true, message: 'Opening Google Sites to create a new site.', severity: 'info' });
+    } catch (e) {
+      console.error('Create Site placeholder failed:', e);
+      setGlobalSnackbar({ open: true, message: 'Failed to initiate Google Site creation.', severity: 'error' });
+    } finally {
+      setIsCreatingGoogleSite(false);
+    }
+  };
+
+  // Looker Studio creation (no public REST to create reports; open new report page)
+  const createNewLookerReport = async (title) => {
+    setIsCreatingLookerReport(true);
+    try {
+      const url = 'https://lookerstudio.google.com/reporting/create';
+      setLookerStudioUrl(url);
+      setActiveDevelopmentTab('glooker');
+      setShowLookerReportDialog(false);
+      setNewLookerReportTitle('');
+      setGlobalSnackbar({ open: true, message: 'Opening Looker Studio to create a new report.', severity: 'info' });
+    } catch (e) {
+      console.error('Create Looker report failed:', e);
+      setGlobalSnackbar({ open: true, message: 'Failed to open Looker Studio.', severity: 'error' });
+    } finally {
+      setIsCreatingLookerReport(false);
+    }
+  };
   const [githubToken, setGithubToken] = useState(null);
   const [useEnhancedIDE, setUseEnhancedIDE] = useState(true); // Default to enhanced IDE
   // --- GOOGLE OAUTH STATE AND INIT ---
@@ -3882,6 +4346,176 @@ ${output}
     }
   };
 
+  // Google Sheets creation function
+  const createNewGoogleSheet = async (title) => {
+    if (!googleToken) {
+      setGlobalSnackbar({ open: true, message: 'Please sign in to Google first to create a Google Sheet.', severity: 'error' });
+      return;
+    }
+    setIsCreatingGoogleSheet(true);
+    try {
+      const res = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${googleToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ properties: { title: title || `New Sheet ${new Date().toLocaleString()}` } })
+      });
+      if (res.ok) {
+        const sheet = await res.json();
+        const url = `https://docs.google.com/spreadsheets/d/${sheet.spreadsheetId}/edit`;
+        setGoogleSheetUrl(url);
+        setActiveDevelopmentTab('gsheets');
+        setShowGoogleSheetDialog(false);
+        setNewGoogleSheetTitle('');
+        setGlobalSnackbar({ open: true, message: 'Google Sheet created and opened.', severity: 'success' });
+      } else {
+        const txt = await res.text();
+        // Fallback via Drive API if Sheets API is disabled (403)
+        if (res.status === 403) {
+          const driveRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${googleToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: title || `New Sheet ${new Date().toLocaleString()}`,
+              mimeType: 'application/vnd.google-apps.spreadsheet'
+            })
+          });
+          if (!driveRes.ok) {
+            const driveTxt = await driveRes.text();
+            throw new Error(`Sheets disabled; Drive fallback failed: ${driveTxt}`);
+          }
+          const created = await driveRes.json();
+          const url = `https://docs.google.com/spreadsheets/d/${created.id}/edit`;
+          setGoogleSheetUrl(url);
+          setActiveDevelopmentTab('gsheets');
+          setShowGoogleSheetDialog(false);
+          setNewGoogleSheetTitle('');
+          setGlobalSnackbar({ open: true, message: 'Google Sheet created via Drive and opened.', severity: 'success' });
+        } else {
+          throw new Error(txt);
+        }
+      }
+    } catch (e) {
+      console.error('Create Sheet failed:', e);
+      setGlobalSnackbar({ open: true, message: 'Failed to create Google Sheet. Enable Sheets API or try again.', severity: 'error' });
+    } finally {
+      setIsCreatingGoogleSheet(false);
+    }
+  };
+
+  // Google Slides creation function
+  const createNewGoogleSlides = async (title) => {
+    if (!googleToken) {
+      setGlobalSnackbar({ open: true, message: 'Please sign in to Google first to create Google Slides.', severity: 'error' });
+      return;
+    }
+    setIsCreatingGoogleSlides(true);
+    try {
+      const res = await fetch('https://slides.googleapis.com/v1/presentations', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${googleToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title || `New Slides ${new Date().toLocaleString()}` })
+      });
+      if (res.ok) {
+        const pres = await res.json();
+        const url = `https://docs.google.com/presentation/d/${pres.presentationId}/edit`;
+        setGoogleSlidesUrl(url);
+        setActiveDevelopmentTab('gslides');
+        setShowGoogleSlidesDialog(false);
+        setNewGoogleSlidesTitle('');
+        setGlobalSnackbar({ open: true, message: 'Google Slides created and opened.', severity: 'success' });
+      } else {
+        const txt = await res.text();
+        // Fallback via Drive API if Slides API is disabled (403)
+        if (res.status === 403) {
+          const driveRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${googleToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: title || `New Slides ${new Date().toLocaleString()}`,
+              mimeType: 'application/vnd.google-apps.presentation'
+            })
+          });
+          if (!driveRes.ok) {
+            const driveTxt = await driveRes.text();
+            throw new Error(`Slides disabled; Drive fallback failed: ${driveTxt}`);
+          }
+          const created = await driveRes.json();
+          const url = `https://docs.google.com/presentation/d/${created.id}/edit`;
+          setGoogleSlidesUrl(url);
+          setActiveDevelopmentTab('gslides');
+          setShowGoogleSlidesDialog(false);
+          setNewGoogleSlidesTitle('');
+          setGlobalSnackbar({ open: true, message: 'Google Slides created via Drive and opened.', severity: 'success' });
+        } else {
+          throw new Error(txt);
+        }
+      }
+    } catch (e) {
+      console.error('Create Slides failed:', e);
+      setGlobalSnackbar({ open: true, message: 'Failed to create Google Slides. Enable Slides API or try again.', severity: 'error' });
+    } finally {
+      setIsCreatingGoogleSlides(false);
+    }
+  };
+
+  // Google Forms creation function (Drive fallback if Forms API unavailable)
+  const createNewGoogleForm = async (title) => {
+    if (!googleToken) {
+      setGlobalSnackbar({ open: true, message: 'Please sign in to Google first to create a Google Form.', severity: 'error' });
+      return;
+    }
+    setIsCreatingGoogleForm(true);
+    try {
+      // Preferred: Forms API (may require additional enablement and scopes)
+      const formsRes = await fetch('https://forms.googleapis.com/v1/forms', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${googleToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ info: { title: title || `New Form ${new Date().toLocaleString()}` } })
+      });
+      if (formsRes.ok) {
+        const form = await formsRes.json();
+        // The Forms API returns a formId; open edit URL
+        const url = `https://docs.google.com/forms/d/${form.formId}/edit`;
+        setGoogleFormUrl(url);
+        setActiveDevelopmentTab('gforms');
+        setShowGoogleFormDialog(false);
+        setNewGoogleFormTitle('');
+        setGlobalSnackbar({ open: true, message: 'Google Form created and opened.', severity: 'success' });
+      } else {
+        const txt = await formsRes.text();
+        // Fallback via Drive API
+        if (formsRes.status === 403 || formsRes.status === 404) {
+          const driveRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${googleToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: title || `New Form ${new Date().toLocaleString()}`,
+              mimeType: 'application/vnd.google-apps.form'
+            })
+          });
+          if (!driveRes.ok) {
+            const driveTxt = await driveRes.text();
+            throw new Error(`Forms disabled; Drive fallback failed: ${driveTxt}`);
+          }
+          const created = await driveRes.json();
+          const url = `https://docs.google.com/forms/d/${created.id}/edit`;
+          setGoogleFormUrl(url);
+          setActiveDevelopmentTab('gforms');
+          setShowGoogleFormDialog(false);
+          setNewGoogleFormTitle('');
+          setGlobalSnackbar({ open: true, message: 'Google Form created via Drive and opened.', severity: 'success' });
+        } else {
+          throw new Error(txt);
+        }
+      }
+    } catch (e) {
+      console.error('Create Form failed:', e);
+      setGlobalSnackbar({ open: true, message: 'Failed to create Google Form. Enable Forms API or try again.', severity: 'error' });
+    } finally {
+      setIsCreatingGoogleForm(false);
+    }
+  };
+
   // --- Refresh workspaces from Supabase ---
   
 async function fetchCollaborators(workspaceId) {
@@ -5156,9 +5790,19 @@ useEffect(() => {
               }}>
                 {/* Development Tabs */}
                 <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#fff' }}>
-                  <Tabs value={activeDevelopmentTab} onChange={(_, v) => setActiveDevelopmentTab(v)}>
-                    <Tab label="Google Docs" value="gdocs" />
-                    <Tab label="Google Drive" value="gdrive" />
+                  <Tabs
+                    value={['gdocs','gsheets','gslides','gforms','gdrive','gdrawings','gsites','glooker'].includes(activeDevelopmentTab) ? 'google' : activeDevelopmentTab}
+                    onChange={(_, v) => {
+                      if (v === 'google') {
+                        if (!['gdocs','gsheets','gslides','gforms','gdrive','gdrawings','gsites','glooker'].includes(activeDevelopmentTab)) {
+                          setActiveDevelopmentTab('gdocs');
+                        }
+                      } else {
+                        setActiveDevelopmentTab(v);
+                      }
+                    }}
+                  >
+                    <Tab label="Google Workspace" value="google" />
                     <Tab label="Web IDE" value="web-ide" />
                     <Tab label="Resources" value="resources" />
                     <Tab label="Search" value="search" />
@@ -5168,6 +5812,37 @@ useEffect(() => {
 
                 {/* Development Content */}
                 <Box sx={{ flex: 1, p: 3, overflowY: 'auto', bgcolor: '#fff' }}>
+
+                  {/* Google Suite Grouped UI */}
+                  {['gdocs','gsheets','gslides','gforms','gdrive','gdrawings','gsites','glooker'].includes(activeDevelopmentTab) && (
+                    <Card sx={{ mb: 3, border: '1px solid #e0e0e0', borderRadius: 2 }}>
+                      <Box sx={{ p: 2, bgcolor: '#f8f9fa', borderBottom: '1px solid #e0e0e0' }}>
+                        <Typography variant="h6" fontWeight={700}>Google Workspace</Typography>
+                        <Typography variant="body2" color="text.secondary">Access Docs, Sheets, Slides, Forms, and Drive from one place</Typography>
+                      </Box>
+                      <Box sx={{ px: 2, pt: 2 }}>
+                        <Tabs
+                          value={activeDevelopmentTab}
+                          onChange={(_, v) => setActiveDevelopmentTab(v)}
+                          variant="scrollable"
+                          scrollButtons="auto"
+                          sx={{
+                            '.MuiTab-root': { textTransform: 'none', minHeight: 40 },
+                            '.MuiTabs-indicator': { height: 3 }
+                          }}
+                        >
+                          <Tab label="Drive" value="gdrive" />
+                          <Tab label="Docs" value="gdocs" />
+                          <Tab label="Sheets" value="gsheets" />
+                          <Tab label="Slides" value="gslides" />
+                          <Tab label="Forms" value="gforms" />
+                          <Tab label="Drawings" value="gdrawings" />
+                          <Tab label="Sites" value="gsites" />
+                          <Tab label="Looker Studio" value="glooker" />
+                        </Tabs>
+                      </Box>
+                    </Card>
+                  )}
 
                                      {activeDevelopmentTab === 'gdocs' && (
                      <Box>
@@ -5292,7 +5967,286 @@ useEffect(() => {
                      </Box>
                    )}
 
-                   {activeDevelopmentTab === 'gdrive' && (
+                    {activeDevelopmentTab === 'gsheets' && (
+                      <Box>
+                        <Typography variant="h5" fontWeight={700} mb={3}>Google Sheets Development</Typography>
+                        {!googleToken && (
+                          <Card sx={{ p: 3, mb: 3, bgcolor: '#f8f9fa' }}>
+                            <Typography variant="h6" fontWeight={600} mb={2}>
+                              <GoogleIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                              Connect to Google
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" mb={2}>
+                              Sign in with Google to open or create Google Sheets in your workspace.
+                            </Typography>
+                            <Button variant="contained" startIcon={<GoogleIcon />} onClick={() => loginWithGoogle()}>
+                              Sign in with Google
+                            </Button>
+                          </Card>
+                        )}
+                        {/* Google Sheets Actions */}
+                        <Card sx={{ p: 3, mb: 3, bgcolor: '#f0fff8' }}>
+                          <Typography variant="h6" fontWeight={600} mb={2}>📊 Google Sheets Actions</Typography>
+                          <Stack direction="row" spacing={2} mb={3} alignItems="center">
+                            <Button variant="contained" disabled={!googleToken || isCreatingGoogleSheet} onClick={() => setShowGoogleSheetDialog(true)} startIcon={isCreatingGoogleSheet ? <CircularProgress size={16} color="inherit" /> : <NoteAddIcon />}> {isCreatingGoogleSheet ? 'Creating...' : 'Create New Sheet'} </Button>
+                            <Button variant="outlined" disabled={!googleToken || isCreatingGoogleSheet} onClick={() => createNewGoogleSheet()} startIcon={<NoteAddIcon />}> Quick Create </Button>
+                            {googleToken && (<Chip label="Google Connected" color="success" icon={<GoogleIcon />} variant="outlined" />)}
+                          </Stack>
+                          {/* Sheet URL Input */}
+                          <Stack direction="row" spacing={2} alignItems="center">
+                            <TextField
+                              label="Or open existing Google Sheet URL"
+                              value={googleSheetUrl}
+                              onChange={e => setGoogleSheetUrl(e.target.value)}
+                              placeholder="https://docs.google.com/spreadsheets/d/..."
+                              sx={{ width: 400 }}
+                              disabled={!googleToken}
+                            />
+                            <Button variant="outlined" disabled={!googleSheetUrl || !googleToken} onClick={() => setGlobalSnackbar({ open: true, message: 'Google Sheet loaded successfully!', severity: 'success' })} startIcon={<OpenInNewIcon />}> Open Sheet </Button>
+                          </Stack>
+                        </Card>
+                        {googleSheetUrl && googleToken && (
+                          <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+                            <EmbeddedGoogleSheetsEditor
+                              sheetUrl={googleSheetUrl}
+                              googleToken={googleToken}
+                              onExit={() => {
+                                setGoogleSheetUrl('');
+                                setActiveDevelopmentTab('gsheets');
+                              }}
+                            />
+                          </Card>
+                        )}
+                      </Box>
+                    )}
+
+                    {activeDevelopmentTab === 'gslides' && (
+                      <Box>
+                        <Typography variant="h5" fontWeight={700} mb={3}>Google Slides Development</Typography>
+                        {!googleToken && (
+                          <Card sx={{ p: 3, mb: 3, bgcolor: '#f8f9fa' }}>
+                            <Typography variant="h6" fontWeight={600} mb={2}>
+                              <GoogleIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                              Connect to Google
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" mb={2}>
+                              Sign in with Google to open or create Google Slides in your workspace.
+                            </Typography>
+                            <Button variant="contained" startIcon={<GoogleIcon />} onClick={() => loginWithGoogle()}>
+                              Sign in with Google
+                            </Button>
+                          </Card>
+                        )}
+                        {/* Google Slides Actions */}
+                        <Card sx={{ p: 3, mb: 3, bgcolor: '#fff8f0' }}>
+                          <Typography variant="h6" fontWeight={600} mb={2}>📽️ Google Slides Actions</Typography>
+                          <Stack direction="row" spacing={2} mb={3} alignItems="center">
+                            <Button variant="contained" disabled={!googleToken || isCreatingGoogleSlides} onClick={() => setShowGoogleSlidesDialog(true)} startIcon={isCreatingGoogleSlides ? <CircularProgress size={16} color="inherit" /> : <NoteAddIcon />}> {isCreatingGoogleSlides ? 'Creating...' : 'Create New Slides'} </Button>
+                            <Button variant="outlined" disabled={!googleToken || isCreatingGoogleSlides} onClick={() => createNewGoogleSlides()} startIcon={<NoteAddIcon />}> Quick Create </Button>
+                            {googleToken && (<Chip label="Google Connected" color="success" icon={<GoogleIcon />} variant="outlined" />)}
+                          </Stack>
+                          {/* Slides URL Input */}
+                          <Stack direction="row" spacing={2} alignItems="center">
+                            <TextField
+                              label="Or open existing Google Slides URL"
+                              value={googleSlidesUrl}
+                              onChange={e => setGoogleSlidesUrl(e.target.value)}
+                              placeholder="https://docs.google.com/presentation/d/..."
+                              sx={{ width: 400 }}
+                              disabled={!googleToken}
+                            />
+                            <Button variant="outlined" disabled={!googleSlidesUrl || !googleToken} onClick={() => setGlobalSnackbar({ open: true, message: 'Google Slides loaded successfully!', severity: 'success' })} startIcon={<OpenInNewIcon />}> Open Slides </Button>
+                          </Stack>
+                        </Card>
+                        {googleSlidesUrl && googleToken && (
+                          <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+                            <EmbeddedGoogleSlidesEditor
+                              slidesUrl={googleSlidesUrl}
+                              googleToken={googleToken}
+                              onExit={() => {
+                                setGoogleSlidesUrl('');
+                                setActiveDevelopmentTab('gslides');
+                              }}
+                            />
+                          </Card>
+                        )}
+                      </Box>
+                    )}
+
+                    {activeDevelopmentTab === 'gdrawings' && (
+                      <Box>
+                        <Typography variant="h5" fontWeight={700} mb={3}>Google Drawings Development</Typography>
+                        {!googleToken && (
+                          <Card sx={{ p: 3, mb: 3, bgcolor: '#f8f9fa' }}>
+                            <Typography variant="h6" fontWeight={600} mb={2}>
+                              <GoogleIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                              Connect to Google
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" mb={2}>
+                              Sign in with Google to open or create Google Drawings in your workspace.
+                            </Typography>
+                            <Button variant="contained" startIcon={<GoogleIcon />} onClick={() => loginWithGoogle()}>
+                              Sign in with Google
+                            </Button>
+                          </Card>
+                        )}
+                        {/* Google Drawings Actions */}
+                        <Card sx={{ p: 3, mb: 3, bgcolor: '#f8fff0' }}>
+                          <Typography variant="h6" fontWeight={600} mb={2}>🖼️ Google Drawings Actions</Typography>
+                          <Stack direction="row" spacing={2} mb={3} alignItems="center">
+                            <Button variant="contained" disabled={!googleToken || isCreatingGoogleDrawing} onClick={() => setShowGoogleDrawingDialog(true)} startIcon={isCreatingGoogleDrawing ? <CircularProgress size={16} color="inherit" /> : <NoteAddIcon />}> {isCreatingGoogleDrawing ? 'Creating...' : 'Create New Drawing'} </Button>
+                            <Button variant="outlined" disabled={!googleToken || isCreatingGoogleDrawing} onClick={() => createNewGoogleDrawing()} startIcon={<NoteAddIcon />}> Quick Create </Button>
+                            {googleToken && (<Chip label="Google Connected" color="success" icon={<GoogleIcon />} variant="outlined" />)}
+                          </Stack>
+                          {/* Drawing URL Input */}
+                          <Stack direction="row" spacing={2} alignItems="center">
+                            <TextField
+                              label="Open existing Google Drawing URL"
+                              value={googleDrawingUrl}
+                              onChange={e => setGoogleDrawingUrl(e.target.value)}
+                              placeholder="https://docs.google.com/drawings/d/..."
+                              sx={{ width: 400 }}
+                              disabled={!googleToken}
+                            />
+                            <Button variant="outlined" disabled={!googleDrawingUrl || !googleToken} onClick={() => setGlobalSnackbar({ open: true, message: 'Google Drawing loaded successfully!', severity: 'success' })} startIcon={<OpenInNewIcon />}> Open Drawing </Button>
+                          </Stack>
+                        </Card>
+                        {googleDrawingUrl && googleToken && (
+                          <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+                            <EmbeddedGoogleDrawingsEditor
+                              drawingUrl={googleDrawingUrl}
+                              googleToken={googleToken}
+                              onExit={() => {
+                                setGoogleDrawingUrl('');
+                                setActiveDevelopmentTab('gdrawings');
+                              }}
+                            />
+                          </Card>
+                        )}
+                      </Box>
+                    )}
+
+                    {activeDevelopmentTab === 'gsites' && (
+                      <Box>
+                        <Typography variant="h5" fontWeight={700} mb={3}>Google Sites</Typography>
+                        {/* Google Sites Actions */}
+                        <Card sx={{ p: 3, mb: 3, bgcolor: '#f0f0ff' }}>
+                          <Typography variant="h6" fontWeight={600} mb={2}>🌐 Google Sites Actions</Typography>
+                          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+                            <Button variant="contained" disabled={isCreatingGoogleSite} onClick={() => setShowGoogleSiteDialog(true)} startIcon={isCreatingGoogleSite ? <CircularProgress size={16} color="inherit" /> : <NoteAddIcon />}>{isCreatingGoogleSite ? 'Creating...' : 'Create New Site'}</Button>
+                            <Button variant="outlined" disabled={isCreatingGoogleSite} onClick={() => createNewGoogleSite()} startIcon={<NoteAddIcon />}>Quick Create</Button>
+                            <TextField
+                              label="Open Google Sites URL"
+                              value={googleSiteUrl}
+                              onChange={e => setGoogleSiteUrl(e.target.value)}
+                              placeholder="https://sites.google.com/..."
+                              sx={{ width: 500 }}
+                            />
+                          </Stack>
+                          <Typography variant="body2" color="text.secondary">Editing Google Sites in an iframe is limited; use Open in New Tab when needed.</Typography>
+                        </Card>
+                        {googleSiteUrl && (
+                          <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+                            <EmbeddedGoogleSitesViewer
+                              siteUrl={googleSiteUrl}
+                              onExit={() => {
+                                setGoogleSiteUrl('');
+                                setActiveDevelopmentTab('gsites');
+                              }}
+                            />
+                          </Card>
+                        )}
+                      </Box>
+                    )}
+
+                    {activeDevelopmentTab === 'glooker' && (
+                      <Box>
+                        <Typography variant="h5" fontWeight={700} mb={3}>Looker Studio</Typography>
+                        {/* Looker Studio Actions */}
+                        <Card sx={{ p: 3, mb: 3, bgcolor: '#fff0f5' }}>
+                          <Typography variant="h6" fontWeight={600} mb={2}>📊 Looker Studio Actions</Typography>
+                          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+                            <Button variant="contained" disabled={isCreatingLookerReport} onClick={() => setShowLookerReportDialog(true)} startIcon={isCreatingLookerReport ? <CircularProgress size={16} color="inherit" /> : <NoteAddIcon />}>{isCreatingLookerReport ? 'Creating...' : 'Create New Report'}</Button>
+                            <Button variant="outlined" disabled={isCreatingLookerReport} onClick={() => createNewLookerReport()} startIcon={<NoteAddIcon />}>Quick Create</Button>
+                            <TextField
+                              label="Open Looker Studio Report URL"
+                              value={lookerStudioUrl}
+                              onChange={e => setLookerStudioUrl(e.target.value)}
+                              placeholder="https://lookerstudio.google.com/reporting/..."
+                              sx={{ width: 500 }}
+                            />
+                          </Stack>
+                          <Typography variant="body2" color="text.secondary">Editing Looker Studio in an iframe is limited; use Open in New Tab to edit.
+                          </Typography>
+                        </Card>
+                        {lookerStudioUrl && (
+                          <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+                            <EmbeddedLookerStudioViewer
+                              reportUrl={lookerStudioUrl}
+                              onExit={() => {
+                                setLookerStudioUrl('');
+                                setActiveDevelopmentTab('glooker');
+                              }}
+                            />
+                          </Card>
+                        )}
+                      </Box>
+                    )}
+
+                    {activeDevelopmentTab === 'gforms' && (
+                      <Box>
+                        <Typography variant="h5" fontWeight={700} mb={3}>Google Forms Development</Typography>
+                        {!googleToken && (
+                          <Card sx={{ p: 3, mb: 3, bgcolor: '#f8f9fa' }}>
+                            <Typography variant="h6" fontWeight={600} mb={2}>
+                              <GoogleIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                              Connect to Google
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" mb={2}>
+                              Sign in with Google to open or create Google Forms in your workspace.
+                            </Typography>
+                            <Button variant="contained" startIcon={<GoogleIcon />} onClick={() => loginWithGoogle()}>
+                              Sign in with Google
+                            </Button>
+                          </Card>
+                        )}
+                        {/* Google Forms Actions */}
+                        <Card sx={{ p: 3, mb: 3, bgcolor: '#f8f9ff' }}>
+                          <Typography variant="h6" fontWeight={600} mb={2}>🧾 Google Forms Actions</Typography>
+                          <Stack direction="row" spacing={2} mb={3} alignItems="center">
+                            <Button variant="contained" disabled={!googleToken || isCreatingGoogleForm} onClick={() => setShowGoogleFormDialog(true)} startIcon={isCreatingGoogleForm ? <CircularProgress size={16} color="inherit" /> : <NoteAddIcon />}> {isCreatingGoogleForm ? 'Creating...' : 'Create New Form'} </Button>
+                            <Button variant="outlined" disabled={!googleToken || isCreatingGoogleForm} onClick={() => createNewGoogleForm()} startIcon={<NoteAddIcon />}> Quick Create </Button>
+                            {googleToken && (<Chip label="Google Connected" color="success" icon={<GoogleIcon />} variant="outlined" />)}
+                          </Stack>
+                          {/* Form URL Input */}
+                          <Stack direction="row" spacing={2} alignItems="center">
+                            <TextField
+                              label="Or open existing Google Form URL"
+                              value={googleFormUrl}
+                              onChange={e => setGoogleFormUrl(e.target.value)}
+                              placeholder="https://docs.google.com/forms/d/..."
+                              sx={{ width: 400 }}
+                              disabled={!googleToken}
+                            />
+                            <Button variant="outlined" disabled={!googleFormUrl || !googleToken} onClick={() => setGlobalSnackbar({ open: true, message: 'Google Form loaded successfully!', severity: 'success' })} startIcon={<OpenInNewIcon />}> Open Form </Button>
+                          </Stack>
+                        </Card>
+                        {googleFormUrl && googleToken && (
+                          <Card sx={{ border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
+                            <EmbeddedGoogleFormsEditor
+                              formUrl={googleFormUrl}
+                              googleToken={googleToken}
+                              onExit={() => {
+                                setGoogleFormUrl('');
+                                setActiveDevelopmentTab('gforms');
+                              }}
+                            />
+                          </Card>
+                        )}
+                      </Box>
+                    )}
+
+                    {activeDevelopmentTab === 'gdrive' && (
                      <Box>
                        <Typography variant="h5" fontWeight={700} mb={3}>Google Drive Integration</Typography>
                        
@@ -5302,9 +6256,9 @@ useEffect(() => {
                          setGoogleToken={setGoogleToken}
                          setGlobalSnackbar={setGlobalSnackbar}
                          loginWithGoogle={loginWithGoogle}
-                         onFileSelect={(file) => {
+                          onFileSelect={(file) => {
                            // Handle file selection - could open in appropriate editor
-                           if (file.mimeType && file.mimeType.includes('document')) {
+                            if (file.mimeType && file.mimeType.includes('document')) {
                              // For Google Docs, open in the Google Docs tab
                              const docUrl = `https://docs.google.com/document/d/${file.id}/edit`;
                              setGoogleDocUrl(docUrl);
@@ -5314,20 +6268,60 @@ useEffect(() => {
                                message: `Opening ${file.name} in Google Docs editor`,
                                severity: 'success'
                              });
-                           } else if (file.mimeType && file.mimeType.includes('spreadsheet')) {
-                             // For Google Sheets, could add spreadsheet editor support
-                             setGlobalSnackbar({
-                               open: true,
-                               message: `Selected Google Sheet: ${file.name}`,
-                               severity: 'info'
-                             });
+                            } else if (file.mimeType && file.mimeType.includes('spreadsheet')) {
+                              const sheetUrl = `https://docs.google.com/spreadsheets/d/${file.id}/edit`;
+                              setGoogleSheetUrl(sheetUrl);
+                              setActiveDevelopmentTab('gsheets');
+                              setGlobalSnackbar({
+                                open: true,
+                                message: `Opening ${file.name} in Google Sheets editor`,
+                                severity: 'success'
+                              });
                            } else if (file.mimeType && file.mimeType.includes('presentation')) {
-                             // For Google Slides, could add presentation editor support
-                             setGlobalSnackbar({
-                               open: true,
-                               message: `Selected Google Slides: ${file.name}`,
-                               severity: 'info'
-                             });
+                              const slidesUrl = `https://docs.google.com/presentation/d/${file.id}/edit`;
+                              setGoogleSlidesUrl(slidesUrl);
+                              setActiveDevelopmentTab('gslides');
+                              setGlobalSnackbar({
+                                open: true,
+                                message: `Opening ${file.name} in Google Slides editor`,
+                                severity: 'success'
+                              });
+                            } else if (file.mimeType && file.mimeType.includes('form')) {
+                              const formUrl = `https://docs.google.com/forms/d/${file.id}/edit`;
+                              setGoogleFormUrl(formUrl);
+                              setActiveDevelopmentTab('gforms');
+                              setGlobalSnackbar({
+                                open: true,
+                                message: `Opening ${file.name} in Google Forms editor`,
+                                severity: 'success'
+                              });
+                            } else if (file.mimeType && file.mimeType.includes('drawing')) {
+                              const drawingUrl = `https://docs.google.com/drawings/d/${file.id}/edit`;
+                              setGoogleDrawingUrl(drawingUrl);
+                              setActiveDevelopmentTab('gdrawings');
+                              setGlobalSnackbar({
+                                open: true,
+                                message: `Opening ${file.name} in Google Drawings editor`,
+                                severity: 'success'
+                              });
+                            } else if (file.mimeType && file.mimeType.includes('site')) {
+                              // Google Sites are Drive items with mimeType application/vnd.google-apps.site
+                              // Not always enabled; route by constructing a Sites URL if possible
+                              const siteUrl = file.webViewLink || `https://sites.google.com/?authuser=0`;
+                              setGoogleSiteUrl(siteUrl);
+                              setActiveDevelopmentTab('gsites');
+                              setGlobalSnackbar({
+                                open: true,
+                                message: `Opening ${file.name} in Google Sites`,
+                                severity: 'success'
+                              });
+                            } else if (file.name && /lookerstudio\.google\.com|datastudio\.google\.com/.test(file.name)) {
+                              const reportUrl = file.webViewLink || '';
+                              if (reportUrl) {
+                                setLookerStudioUrl(reportUrl);
+                                setActiveDevelopmentTab('glooker');
+                                setGlobalSnackbar({ open: true, message: `Opening ${file.name} in Looker Studio`, severity: 'success' });
+                              }
                            } else if (file.downloadUrl) {
                              // For other files, open download URL
                              window.open(file.downloadUrl, '_blank');
@@ -6448,6 +7442,81 @@ useEffect(() => {
           {globalSnackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Google Sheet Creation Dialog */}
+      <Dialog open={showGoogleSheetDialog} onClose={() => { if (!isCreatingGoogleSheet) { setShowGoogleSheetDialog(false); setNewGoogleSheetTitle(''); } }} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <NoteAddIcon color="primary" />
+          Create New Google Sheet
+        </DialogTitle>
+        <DialogContent>
+          <TextField fullWidth label="Sheet Title" value={newGoogleSheetTitle} onChange={(e) => setNewGoogleSheetTitle(e.target.value)} placeholder="Enter sheet title..." sx={{ mb: 2 }} onKeyPress={(e) => { if (e.key === 'Enter' && newGoogleSheetTitle.trim()) { createNewGoogleSheet(newGoogleSheetTitle.trim()); } }} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setShowGoogleSheetDialog(false); setNewGoogleSheetTitle(''); }} disabled={isCreatingGoogleSheet}>Cancel</Button>
+          <Button onClick={() => createNewGoogleSheet(newGoogleSheetTitle.trim())} variant="contained" disabled={isCreatingGoogleSheet} startIcon={isCreatingGoogleSheet ? <CircularProgress size={16} color="inherit" /> : <NoteAddIcon />} sx={{ background: 'linear-gradient(45deg, #34a853 30%, #4285f4 90%)', '&:hover': { background: 'linear-gradient(45deg, #2e7d32 30%, #3367d6 90%)' } }}>{isCreatingGoogleSheet ? 'Creating...' : 'Create Sheet'}</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Google Slides Creation Dialog */}
+      <Dialog open={showGoogleSlidesDialog} onClose={() => { if (!isCreatingGoogleSlides) { setShowGoogleSlidesDialog(false); setNewGoogleSlidesTitle(''); } }} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <NoteAddIcon color="primary" />
+          Create New Google Slides
+        </DialogTitle>
+        <DialogContent>
+          <TextField fullWidth label="Slides Title" value={newGoogleSlidesTitle} onChange={(e) => setNewGoogleSlidesTitle(e.target.value)} placeholder="Enter slides title..." sx={{ mb: 2 }} onKeyPress={(e) => { if (e.key === 'Enter' && newGoogleSlidesTitle.trim()) { createNewGoogleSlides(newGoogleSlidesTitle.trim()); } }} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setShowGoogleSlidesDialog(false); setNewGoogleSlidesTitle(''); }} disabled={isCreatingGoogleSlides}>Cancel</Button>
+          <Button onClick={() => createNewGoogleSlides(newGoogleSlidesTitle.trim())} variant="contained" disabled={isCreatingGoogleSlides} startIcon={isCreatingGoogleSlides ? <CircularProgress size={16} color="inherit" /> : <NoteAddIcon />} sx={{ background: 'linear-gradient(45deg, #FBBC05 30%, #4285f4 90%)', '&:hover': { background: 'linear-gradient(45deg, #F29900 30%, #3367d6 90%)' } }}>{isCreatingGoogleSlides ? 'Creating...' : 'Create Slides'}</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Google Site Creation Dialog */}
+      <Dialog open={showGoogleSiteDialog} onClose={() => { if (!isCreatingGoogleSite) { setShowGoogleSiteDialog(false); setNewGoogleSiteTitle(''); } }} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <NoteAddIcon color="primary" />
+          Create New Google Site
+        </DialogTitle>
+        <DialogContent>
+          <TextField fullWidth label="Site Title" value={newGoogleSiteTitle} onChange={(e) => setNewGoogleSiteTitle(e.target.value)} placeholder="Enter site title..." sx={{ mb: 2 }} onKeyPress={(e) => { if (e.key === 'Enter' && newGoogleSiteTitle.trim()) { createNewGoogleSite(newGoogleSiteTitle.trim()); } }} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setShowGoogleSiteDialog(false); setNewGoogleSiteTitle(''); }} disabled={isCreatingGoogleSite}>Cancel</Button>
+          <Button onClick={() => createNewGoogleSite(newGoogleSiteTitle.trim())} variant="contained" disabled={isCreatingGoogleSite} startIcon={isCreatingGoogleSite ? <CircularProgress size={16} color="inherit" /> : <NoteAddIcon />} sx={{ background: 'linear-gradient(45deg, #34a853 30%, #4285f4 90%)', '&:hover': { background: 'linear-gradient(45deg, #2e7d32 30%, #3367d6 90%)' } }}>{isCreatingGoogleSite ? 'Creating...' : 'Open Sites'}</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Looker Studio Creation Dialog */}
+      <Dialog open={showLookerReportDialog} onClose={() => { if (!isCreatingLookerReport) { setShowLookerReportDialog(false); setNewLookerReportTitle(''); } }} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <NoteAddIcon color="primary" />
+          Create New Looker Studio Report
+        </DialogTitle>
+        <DialogContent>
+          <TextField fullWidth label="Report Title" value={newLookerReportTitle} onChange={(e) => setNewLookerReportTitle(e.target.value)} placeholder="Enter report title..." sx={{ mb: 2 }} onKeyPress={(e) => { if (e.key === 'Enter' && newLookerReportTitle.trim()) { createNewLookerReport(newLookerReportTitle.trim()); } }} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setShowLookerReportDialog(false); setNewLookerReportTitle(''); }} disabled={isCreatingLookerReport}>Cancel</Button>
+          <Button onClick={() => createNewLookerReport(newLookerReportTitle.trim())} variant="contained" disabled={isCreatingLookerReport} startIcon={isCreatingLookerReport ? <CircularProgress size={16} color="inherit" /> : <NoteAddIcon />} sx={{ background: 'linear-gradient(45deg, #34a853 30%, #4285f4 90%)', '&:hover': { background: 'linear-gradient(45deg, #2e7d32 30%, #3367d6 90%)' } }}>{isCreatingLookerReport ? 'Creating...' : 'Open Looker Studio'}</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Google Drawing Creation Dialog */}
+      <Dialog open={showGoogleDrawingDialog} onClose={() => { if (!isCreatingGoogleDrawing) { setShowGoogleDrawingDialog(false); setNewGoogleDrawingTitle(''); } }} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <NoteAddIcon color="primary" />
+          Create New Google Drawing
+        </DialogTitle>
+        <DialogContent>
+          <TextField fullWidth label="Drawing Title" value={newGoogleDrawingTitle} onChange={(e) => setNewGoogleDrawingTitle(e.target.value)} placeholder="Enter drawing title..." sx={{ mb: 2 }} onKeyPress={(e) => { if (e.key === 'Enter' && newGoogleDrawingTitle.trim()) { createNewGoogleDrawing(newGoogleDrawingTitle.trim()); } }} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setShowGoogleDrawingDialog(false); setNewGoogleDrawingTitle(''); }} disabled={isCreatingGoogleDrawing}>Cancel</Button>
+          <Button onClick={() => createNewGoogleDrawing(newGoogleDrawingTitle.trim())} variant="contained" disabled={isCreatingGoogleDrawing} startIcon={isCreatingGoogleDrawing ? <CircularProgress size={16} color="inherit" /> : <NoteAddIcon />} sx={{ background: 'linear-gradient(45deg, #34a853 30%, #4285f4 90%)', '&:hover': { background: 'linear-gradient(45deg, #2e7d32 30%, #3367d6 90%)' } }}>{isCreatingGoogleDrawing ? 'Creating...' : 'Create Drawing'}</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Google Docs Action Alert */}
       <Snackbar

@@ -490,12 +490,22 @@ function GoogleDrivePicker({ googleToken, onFileSelect, setGlobalSnackbar, setGo
         <Typography variant="body2" color="text.secondary" mb={3}>
           Sign in with Google to access and manage your Google Drive files directly in your workspace.
         </Typography>
-        <Chip 
-          label="Google Drive Access Required" 
-          color="warning" 
-          variant="outlined"
-          icon={<Cloud />}
-        />
+        <Stack direction="row" spacing={2} justifyContent="center">
+          <Chip 
+            label="Google Drive Access Required" 
+            color="warning" 
+            variant="outlined"
+            icon={<Cloud />}
+          />
+          <Button
+            variant="contained"
+            startIcon={<Google />}
+            onClick={loginWithGoogle}
+            sx={{ bgcolor: '#4285f4', '&:hover': { bgcolor: '#3367d6' } }}
+          >
+            Sign in with Google
+          </Button>
+        </Stack>
       </Card>
     );
   }
@@ -736,7 +746,12 @@ function GoogleDrivePicker({ googleToken, onFileSelect, setGlobalSnackbar, setGo
                       handleFolderClick(file);
                       return;
                     }
-                    if (file.mimeType === 'application/vnd.google-apps.document' && onFileSelect) {
+                    const isGoogleDoc = file.mimeType === 'application/vnd.google-apps.document';
+                    const isGoogleSheet = file.mimeType === 'application/vnd.google-apps.spreadsheet';
+                    const isGoogleSlides = file.mimeType === 'application/vnd.google-apps.presentation';
+                    const isGoogleForm = file.mimeType === 'application/vnd.google-apps.form';
+                    const isGoogleDrawing = file.mimeType === 'application/vnd.google-apps.drawing';
+                    if ((isGoogleDoc || isGoogleSheet || isGoogleSlides || isGoogleForm || isGoogleDrawing) && onFileSelect) {
                       onFileSelect(file);
                       return;
                     }
