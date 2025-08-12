@@ -64,7 +64,7 @@ class SmartCalculator {
   calculate(a, b, operation) {
     const result = this.performOperation(a, b, operation);
     this.history.push({ a, b, operation, result, timestamp: new Date() });
-    console.log(\`\${a} \${operation} \${b} = \${result}\`);
+    console.log(a + " " + operation + " " + b + " = " + result);
     return result;
   }
   
@@ -290,7 +290,589 @@ I'm your AI coding assistant, here to help you:
     }
   }, [code, originalContent, isGitHubFile]);
 
+  const [pyodide, setPyodide] = useState(null);
+  const [isPyodideLoading, setIsPyodideLoading] = useState(false);
+  const [cheerpj, setCheerpj] = useState(null);
+  const [isCheerpjLoading, setIsCheerpjLoading] = useState(false);
+  const [emscripten, setEmscripten] = useState(null);
+  const [isEmscriptenLoading, setIsEmscriptenLoading] = useState(false);
+  
+  // Load runtimes based on language
+  useEffect(() => {
+    if (language === 'python' && !pyodide && !isPyodideLoading) {
+      setIsPyodideLoading(true);
+      loadPyodide();
+    } else if (language === 'java' && !cheerpj && !isCheerpjLoading) {
+      setIsCheerpjLoading(true);
+      loadCheerpj();
+    } else if (language === 'cpp' && !emscripten && !isEmscriptenLoading) {
+      setIsEmscriptenLoading(true);
+      loadEmscripten();
+    }
+  }, [language, pyodide, isPyodideLoading, cheerpj, isCheerpjLoading, emscripten, isEmscriptenLoading]);
 
+  // Get default code based on language
+  const getDefaultCodeForLanguage = (lang) => {
+    switch (lang) {
+      case 'python':
+        return `# Welcome to the Enhanced AI-Powered Web IDE!
+# Click the green "Run" button to execute this Python code!
+
+print("🚀 Enhanced AI IDE is working!")
+print("================================")
+
+def hello_world():
+    print("Hello from Enhanced IDE!")
+    return "AI-powered development at your fingertips!"
+
+# Try AI features:
+# 1. Select code and use AI actions (floating toolbar)
+# 2. Chat with AI for help (click Ask AI or chat icon)
+# 3. Get intelligent suggestions
+# 4. Auto-complete with AI
+
+class SmartCalculator:
+    def __init__(self):
+        self.history = []
+    
+    def calculate(self, a, b, operation):
+        result = self.perform_operation(a, b, operation)
+        self.history.append({
+            'a': a, 'b': b, 'operation': operation, 
+            'result': result, 'timestamp': 'now'
+        })
+        print(str(a) + " " + operation + " " + str(b) + " = " + str(result))
+        return result
+    
+    def perform_operation(self, a, b, operation):
+        if operation == '+': return a + b
+        elif operation == '-': return a - b
+        elif operation == '*': return a * b
+        elif operation == '/': return a / b if b != 0 else 'Error: Division by zero'
+        elif operation == '%': return a % b
+        elif operation == '**': return a ** b
+        else: return "Invalid operation"
+    
+    def get_history(self):
+        return self.history
+    
+    def clear_history(self):
+        self.history = []
+
+# Test the calculator
+print("Testing SmartCalculator:")
+calc = SmartCalculator()
+calc.calculate(10, 5, '+')
+calc.calculate(15, 3, '*')
+calc.calculate(20, 4, '/')
+
+print("\\nCalculation History:")
+print(calc.get_history())
+
+print("\\nRunning hello_world function:")
+result = hello_world()
+print("Result:", result)
+
+print("\\n🎉 Python code execution completed!")`;
+      case 'typescript':
+        return `// Welcome to the Enhanced AI-Powered Web IDE!
+// Click the green "Run" button to execute this TypeScript code!
+
+console.log("🚀 Enhanced AI IDE is working!");
+console.log("================================");
+
+interface CalculatorHistory {
+  a: number;
+  b: number;
+  operation: string;
+  result: number | string;
+  timestamp: Date;
+}
+
+class SmartCalculator {
+  private history: CalculatorHistory[] = [];
+
+  calculate(a: number, b: number, operation: string): number | string {
+    const result = this.performOperation(a, b, operation);
+    this.history.push({
+      a, b, operation, result, timestamp: new Date()
+    });
+    console.log(a + " " + operation + " " + b + " = " + result);
+    return result;
+  }
+
+  private performOperation(a: number, b: number, operation: string): number | string {
+    switch(operation) {
+      case '+': return a + b;
+      case '-': return a - b;
+      case '*': return a * b;
+      case '/': return b !== 0 ? a / b : 'Error: Division by zero';
+      case '%': return a % b;
+      case '**': return a ** b;
+      default: return "Invalid operation";
+    }
+  }
+
+  getHistory(): CalculatorHistory[] {
+    return this.history;
+  }
+
+  clearHistory(): void {
+    this.history = [];
+  }
+}
+
+function helloWorld(): string {
+  console.log("Hello from Enhanced IDE!");
+  return "AI-powered development at your fingertips!";
+}
+
+// Test the calculator
+console.log("Testing SmartCalculator:");
+const calc = new SmartCalculator();
+calc.calculate(10, 5, '+');
+calc.calculate(15, 3, '*');
+calc.calculate(20, 4, '/');
+
+console.log("\\nCalculation History:");
+console.log(calc.getHistory());
+
+console.log("\\nRunning helloWorld function:");
+const result = helloWorld();
+console.log("Result:", result);
+
+console.log("\\n🎉 TypeScript code execution completed!");`;
+      case 'java':
+        return `// Welcome to the Enhanced AI-Powered Web IDE!
+// Click the green "Run" button to execute this Java code!
+
+public class Main {
+    public static void main(String[] args) {
+        System.out.println("🚀 Enhanced AI IDE is working!");
+        System.out.println("================================");
+        
+        // Try AI features:
+        // 1. Select code and use AI actions (floating toolbar)
+        // 2. Chat with AI for help (click Ask AI or chat icon)
+        // 3. Get intelligent suggestions
+        // 4. Auto-complete with AI
+        
+        SmartCalculator calc = new SmartCalculator();
+        
+        // Test the calculator
+        System.out.println("Testing SmartCalculator:");
+        calc.calculate(10, 5, "+");
+        calc.calculate(15, 3, "*");
+        calc.calculate(20, 4, "/");
+        
+        System.out.println("\\nCalculation History:");
+        calc.printHistory();
+        
+        System.out.println("\\nRunning helloWorld function:");
+        String result = helloWorld();
+        System.out.println("Result: " + result);
+        
+        System.out.println("\\n🎉 Java code execution completed!");
+    }
+    
+    public static String helloWorld() {
+        System.out.println("Hello from Enhanced IDE!");
+        return "AI-powered development at your fingertips!";
+    }
+}
+
+class SmartCalculator {
+    private java.util.List<Calculation> history = new java.util.ArrayList<>();
+    
+    public void calculate(double a, double b, String operation) {
+        double result = performOperation(a, b, operation);
+        history.add(new Calculation(a, b, operation, result));
+        System.out.println(a + " " + operation + " " + b + " = " + result);
+    }
+    
+    private double performOperation(double a, double b, String operation) {
+        switch(operation) {
+            case "+": return a + b;
+            case "-": return a - b;
+            case "*": return a * b;
+            case "/": return b != 0 ? a / b : Double.NaN;
+            case "%": return a % b;
+            default: return Double.NaN;
+        }
+    }
+    
+    public void printHistory() {
+        for (Calculation calc : history) {
+            System.out.println(calc);
+        }
+    }
+}
+
+class Calculation {
+    private double a, b, result;
+    private String operation;
+    
+    public Calculation(double a, double b, String operation, double result) {
+        this.a = a;
+        this.b = b;
+        this.operation = operation;
+        this.result = result;
+    }
+    
+    @Override
+    public String toString() {
+        return a + " " + operation + " " + b + " = " + result;
+    }
+}`;
+      case 'cpp':
+        return `// Welcome to the Enhanced AI-Powered Web IDE!
+// Click the green "Run" button to execute this C++ code!
+
+#include <iostream>
+#include <vector>
+#include <string>
+#include <cmath>
+
+using namespace std;
+
+class SmartCalculator {
+private:
+    struct Calculation {
+        double a, b, result;
+        string operation;
+        
+        Calculation(double a, double b, string op, double res) 
+            : a(a), b(b), operation(op), result(res) {}
+    };
+    
+    vector<Calculation> history;
+
+public:
+    void calculate(double a, double b, string operation) {
+        double result = performOperation(a, b, operation);
+        history.push_back(Calculation(a, b, operation, result));
+        cout << a << " " << operation << " " << b << " = " << result << endl;
+    }
+    
+private:
+    double performOperation(double a, double b, string operation) {
+        if (operation == "+") return a + b;
+        if (operation == "-") return a - b;
+        if (operation == "*") return a * b;
+        if (operation == "/") return b != 0 ? a / b : NAN;
+        if (operation == "%") return (int)a % (int)b;
+        if (operation == "**") return pow(a, b);
+        return NAN;
+    }
+
+public:
+    void printHistory() {
+        cout << "\\nCalculation History:" << endl;
+        for (const auto& calc : history) {
+            cout << calc.a << " " << calc.operation << " " << calc.b << " = " << calc.result << endl;
+        }
+    }
+};
+
+string helloWorld() {
+    cout << "Hello from Enhanced IDE!" << endl;
+    return "AI-powered development at your fingertips!";
+}
+
+int main() {
+    cout << "🚀 Enhanced AI IDE is working!" << endl;
+    cout << "================================" << endl;
+    
+    // Try AI features:
+    // 1. Select code and use AI actions (floating toolbar)
+    // 2. Chat with AI for help (click Ask AI or chat icon)
+    // 3. Get intelligent suggestions
+    // 4. Auto-complete with AI
+    
+    SmartCalculator calc;
+    
+    // Test the calculator
+    cout << "Testing SmartCalculator:" << endl;
+    calc.calculate(10, 5, "+");
+    calc.calculate(15, 3, "*");
+    calc.calculate(20, 4, "/");
+    
+    calc.printHistory();
+    
+    cout << "\\nRunning helloWorld function:" << endl;
+    string result = helloWorld();
+    cout << "Result: " << result << endl;
+    
+    cout << "\\n🎉 C++ code execution completed!" << endl;
+    return 0;
+}`;
+      default:
+        return defaultCode;
+    }
+  };
+
+  // Handle language change
+  const handleLanguageChange = (newLanguage) => {
+    setLanguage(newLanguage);
+    // Update file extension based on language
+    const extensionMap = {
+      'javascript': 'js',
+      'typescript': 'ts',
+      'python': 'py',
+      'java': 'java',
+      'cpp': 'cpp'
+    };
+    const extension = extensionMap[newLanguage] || 'js';
+    setFileName(prev => {
+      const nameWithoutExt = prev.split('.').slice(0, -1).join('.');
+      return nameWithoutExt + '.' + extension;
+    });
+    
+    // Update code to language-appropriate default if it's the default code
+    if (code === defaultCode || code === getDefaultCodeForLanguage(language)) {
+      setCode(getDefaultCodeForLanguage(newLanguage));
+    }
+  };
+
+  const loadPyodide = async () => {
+    try {
+      setOutput('🐍 Loading Python runtime...\n');
+      
+      // Check if Pyodide is already loaded globally
+      if (window.loadPyodide) {
+        try {
+          setOutput(prev => prev + 'Found existing Pyodide, initializing...\n');
+          const pyodideInstance = await window.loadPyodide({
+            indexURL: "https://cdn.jsdelivr.net/pyodide/v0.24.1/full/"
+          });
+          setPyodide(pyodideInstance);
+          setOutput(prev => prev + '✅ Python runtime loaded successfully!\n');
+          setIsPyodideLoading(false);
+          return;
+        } catch (error) {
+          setOutput(prev => prev + '⚠️ Failed to use existing Pyodide, trying fresh load...\n');
+          console.warn('Existing Pyodide failed:', error);
+        }
+      }
+      
+      // Multiple CDN fallbacks for better reliability
+      const cdnUrls = [
+        'https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js',
+        'https://unpkg.com/pyodide@0.24.1/pyodide.js',
+        'https://cdn.skypack.dev/pyodide@0.24.1/pyodide.js'
+      ];
+      
+      let lastError = null;
+      
+      for (let i = 0; i < cdnUrls.length; i++) {
+        const cdnUrl = cdnUrls[i];
+        setOutput(prev => prev + `Trying CDN ${i + 1}/${cdnUrls.length}: ${cdnUrl.split('/')[2]}...\n`);
+        
+        try {
+          // Remove any existing Pyodide scripts to prevent conflicts
+          const existingScripts = document.querySelectorAll('script[src*="pyodide"]');
+          existingScripts.forEach(script => script.remove());
+          
+          const script = document.createElement('script');
+          script.src = cdnUrl;
+          script.crossOrigin = 'anonymous';
+          script.type = 'text/javascript';
+          
+          const loadPromise = new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              reject(new Error(`Timeout loading from ${cdnUrl}`));
+            }, 15000); // Shorter timeout per CDN
+            
+            script.onload = async () => {
+              clearTimeout(timeout);
+              try {
+                setOutput(prev => prev + 'Script loaded, initializing Python runtime...\n');
+                
+                // Verify the script loaded correctly
+                if (!window.loadPyodide || typeof window.loadPyodide !== 'function') {
+                  throw new Error('Pyodide loader not found after script load');
+                }
+                
+                const pyodideInstance = await window.loadPyodide({
+                  indexURL: cdnUrl.replace('/pyodide.js', '/'),
+                  stdout: (text) => setOutput(prev => prev + text + '\n'),
+                  stderr: (text) => setOutput(prev => prev + 'Python Error: ' + text + '\n')
+                });
+                
+                setPyodide(pyodideInstance);
+                setOutput(prev => prev + '✅ Python runtime loaded successfully!\n');
+                resolve(pyodideInstance);
+              } catch (initError) {
+                clearTimeout(timeout);
+                reject(new Error(`Initialization failed: ${initError.message}`));
+              }
+            };
+            
+            script.onerror = (error) => {
+              clearTimeout(timeout);
+              reject(new Error(`Script loading failed from ${cdnUrl}`));
+            };
+          });
+          
+          document.head.appendChild(script);
+          await loadPromise;
+          
+          // If we get here, loading was successful
+          setIsPyodideLoading(false);
+          return;
+          
+        } catch (error) {
+          lastError = error;
+          setOutput(prev => prev + `❌ CDN ${i + 1} failed: ${error.message}\n`);
+          
+          // Remove failed script
+          const failedScript = document.querySelector(`script[src="${cdnUrl}"]`);
+          if (failedScript) {
+            failedScript.remove();
+          }
+          
+          // Continue to next CDN
+          continue;
+        }
+      }
+      
+      // If all CDNs failed
+      throw new Error(`All CDNs failed. Last error: ${lastError?.message || 'Unknown error'}`);
+      
+    } catch (error) {
+      console.error('Pyodide loading error:', error);
+      setOutput(prev => prev + `❌ Failed to load Python runtime: ${error.message}\n`);
+      setOutput(prev => prev + '💡 Troubleshooting tips:\n');
+      setOutput(prev => prev + '  • Check your internet connection\n');
+      setOutput(prev => prev + '  • Try refreshing the page\n');
+      setOutput(prev => prev + '  • Disable ad blockers temporarily\n');
+      setOutput(prev => prev + '  • Try switching to JavaScript for now\n');
+    } finally {
+      setIsPyodideLoading(false);
+    }
+  };
+
+  const loadCheerpj = async () => {
+    try {
+      setOutput('Loading Java runtime (CheerpJ)...\n');
+      
+      // Load CheerpJ from CDN
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/cheerpj@2.3.0/dist/cheerpj.min.js';
+      script.onload = async () => {
+        try {
+          // @ts-ignore
+          await window.cheerpjInit();
+          setCheerpj(window.cheerpj);
+          setOutput(prev => prev + '✅ Java runtime (CheerpJ) loaded successfully!\n');
+        } catch (error) {
+          setOutput(prev => prev + '❌ Failed to load Java runtime: ' + error.message + '\n');
+        } finally {
+          setIsCheerpjLoading(false);
+        }
+      };
+      script.onerror = () => {
+        setOutput(prev => prev + '❌ Failed to load Java runtime\n');
+        setIsCheerpjLoading(false);
+      };
+      document.head.appendChild(script);
+    } catch (error) {
+      setOutput(prev => prev + '❌ Error loading Java runtime: ' + error.message + '\n');
+      setIsCheerpjLoading(false);
+    }
+  };
+
+  const loadEmscripten = async () => {
+    try {
+      setOutput('Loading C++ runtime (Emscripten)...\n');
+      
+      // For now, we'll use a simple C++ to JavaScript transpiler
+      // In a full implementation, you'd load the actual Emscripten runtime
+      setEmscripten({ transpile: transpileCppToJs });
+      setOutput(prev => prev + '✅ C++ transpiler loaded successfully!\n');
+      setIsEmscriptenLoading(false);
+    } catch (error) {
+      setOutput(prev => prev + '❌ Error loading C++ runtime: ' + error.message + '\n');
+      setIsEmscriptenLoading(false);
+    }
+  };
+
+  // Simple C++ to JavaScript transpiler
+  const transpileCppToJs = (cppCode) => {
+    let jsCode = cppCode
+      // Remove includes
+      .replace(/#include\s*<[^>]*>/g, '')
+      // Remove using namespace
+      .replace(/using\s+namespace\s+std;/g, '')
+      // Convert cout to console.log
+      .replace(/cout\s*<<\s*([^;]+);/g, 'console.log($1);')
+      // Convert endl to newline
+      .replace(/endl/g, '"\\n"')
+      // Remove main function wrapper
+      .replace(/int\s+main\s*\([^)]*\)\s*{([^}]*)return\s+0;\s*}/s, '$1')
+      // Remove class definitions (simplified)
+      .replace(/class\s+\w+\s*{[^}]*}/g, '')
+      // Remove struct definitions (simplified)
+      .replace(/struct\s+\w+\s*{[^}]*}/g, '')
+      // Convert C++ comments to JS comments
+      .replace(/\/\//g, '//')
+      .replace(/\/\*([^*]|\*[^/])*\*\//g, '/* $1 */');
+    
+    return jsCode;
+  };
+
+  // Simple Python to JavaScript transpiler for basic code
+  const transpilePythonToJs = (pythonCode) => {
+    let jsCode = pythonCode
+      // Convert print statements
+      .replace(/print\s*\(\s*([^)]+)\s*\)/g, 'print($1)')
+      // Convert Python comments to JS comments
+      .replace(/#\s*(.+)/g, '// $1')
+      // Convert def to function
+      .replace(/def\s+(\w+)\s*\(([^)]*)\)\s*:/g, 'function $1($2) {')
+      // Convert if statements
+      .replace(/if\s+([^:]+):/g, 'if ($1) {')
+      // Convert elif to else if
+      .replace(/elif\s+([^:]+):/g, '} else if ($1) {')
+      // Convert else
+      .replace(/else\s*:/g, '} else {')
+      // Convert for loops (basic)
+      .replace(/for\s+(\w+)\s+in\s+range\s*\(\s*(\d+)\s*\)\s*:/g, 'for (let $1 = 0; $1 < $2; $1++) {')
+      .replace(/for\s+(\w+)\s+in\s+range\s*\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*:/g, 'for (let $1 = $2; $1 < $3; $1++) {')
+      // Convert while loops
+      .replace(/while\s+([^:]+):/g, 'while ($1) {')
+      // Convert return statements
+      .replace(/return\s+(.+)/g, 'return $1;')
+      // Convert variable assignments (basic)
+      .replace(/(\w+)\s*=\s*([^=\n]+)/g, 'let $1 = $2;')
+      // Convert string formatting (basic)
+      .replace(/f"([^"]*{[^}]*}[^"]*)"/g, '`$1`')
+      .replace(/{(\w+)}/g, '${$1}')
+      // Add closing braces for indented blocks (simplified)
+      .replace(/\n\s{4,}(.+)/g, '\n    $1')
+      // Convert True/False to true/false
+      .replace(/\bTrue\b/g, 'true')
+      .replace(/\bFalse\b/g, 'false')
+      // Convert None to null
+      .replace(/\bNone\b/g, 'null')
+      // Convert and/or operators
+      .replace(/\band\b/g, '&&')
+      .replace(/\bor\b/g, '||')
+      .replace(/\bnot\b/g, '!')
+      // Add semicolons to statements
+      .replace(/([^{}\s;])\s*\n/g, '$1;\n')
+      // Close function blocks (simplified)
+      .split('\n').map(line => {
+        if (line.trim().startsWith('function') || line.trim().startsWith('if') || 
+            line.trim().startsWith('for') || line.trim().startsWith('while') ||
+            line.trim().includes('} else')) {
+          return line;
+        }
+        return line;
+      }).join('\n') + '\n}'; // Close any open blocks
+    
+    return jsCode;
+  };
 
   // Handle editor mount
   const handleEditorDidMount = (editor, monaco) => {
@@ -922,32 +1504,169 @@ Your changes are still saved locally in the IDE.`,
     try {
       setOutput('Executing code...\n');
       
-      const sandbox = {
-        console: {
-          log: (...args) => setOutput(prev => prev + args.join(' ') + '\n'),
-          error: (...args) => setOutput(prev => prev + 'ERROR: ' + args.join(' ') + '\n'),
-          warn: (...args) => setOutput(prev => prev + 'WARNING: ' + args.join(' ') + '\n'),
-          info: (...args) => setOutput(prev => prev + 'INFO: ' + args.join(' ') + '\n')
-        },
-        setTimeout,
-        setInterval,
-        clearTimeout,
-        clearInterval,
-        Date,
-        Math,
-        JSON,
-        parseInt,
-        parseFloat,
-        isNaN,
-        isFinite
-      };
+      if (language === 'python') {
+        // Execute Python code using Pyodide
+        if (!pyodide) {
+          setOutput(prev => prev + '❌ Python runtime not loaded. Please wait or try again.\n');
+          return;
+        }
+        
+        try {
+          // Simple and reliable Python output capture
+          let capturedOutput = '';
+          
+          // Override Python's print function to capture output
+          pyodide.globals.set('print', (...args) => {
+            const output = args.join(' ');
+            capturedOutput += output + '\n';
+            setOutput(prev => prev + output + '\n');
+          });
+          
+          try {
+            // Execute the Python code directly
+            await pyodide.runPythonAsync(code);
+            
+            // If no output was captured, show a message
+            if (!capturedOutput.trim()) {
+              setOutput(prev => prev + '(No output produced)\n');
+            }
+          } finally {
+            // Restore the original print function
+            pyodide.globals.set('print', pyodide.globals.get('print'));
+          }
+          
+          setOutput(prev => prev + '✅ Python code executed successfully!\n');
+        } catch (error) {
+          setOutput(prev => prev + '❌ Python Error: ' + error.message + '\n');
+        }
+      } else if (language === 'typescript') {
+        // Execute TypeScript code as JavaScript (basic transpilation)
+        try {
+          // Simple TypeScript to JavaScript conversion (removes type annotations)
+          let jsCode = code
+            .replace(/:\s*\w+(?:<[^>]*>)?/g, '') // Remove type annotations
+            .replace(/interface\s+\w+\s*{[^}]*}/g, '') // Remove interfaces
+            .replace(/private\s+/g, '') // Remove private keywords
+            .replace(/public\s+/g, '') // Remove public keywords
+            .replace(/protected\s+/g, '') // Remove protected keywords
+            .replace(/:\s*void/g, '') // Remove void return types
+            .replace(/:\s*string/g, '') // Remove string return types
+            .replace(/:\s*number/g, '') // Remove number return types
+            .replace(/:\s*boolean/g, ''); // Remove boolean return types
+          
+          const sandbox = {
+            console: {
+              log: (...args) => setOutput(prev => prev + args.join(' ') + '\n'),
+              error: (...args) => setOutput(prev => prev + 'ERROR: ' + args.join(' ') + '\n'),
+              warn: (...args) => setOutput(prev => prev + 'WARNING: ' + args.join(' ') + '\n'),
+              info: (...args) => setOutput(prev => prev + 'INFO: ' + args.join(' ') + '\n')
+            },
+            setTimeout,
+            setInterval,
+            clearTimeout,
+            clearInterval,
+            Date,
+            Math,
+            JSON,
+            parseInt,
+            parseFloat,
+            isNaN,
+            isFinite
+          };
 
-      const result = new Function(...Object.keys(sandbox), code);
-      result(...Object.values(sandbox));
-      
-      setOutput(prev => prev + '\n✅ Code executed successfully!');
+          const result = new Function(...Object.keys(sandbox), jsCode);
+          result(...Object.values(sandbox));
+          
+          setOutput(prev => prev + '\n✅ TypeScript code executed successfully!');
+        } catch (error) {
+          setOutput(prev => prev + '\n❌ TypeScript Error: ' + error.message);
+        }
+      } else if (language === 'java') {
+        // Execute Java code using CheerpJ
+        if (!cheerpj) {
+          setOutput(prev => prev + '❌ Java runtime not loaded. Please wait or try again.\n');
+          return;
+        }
+        
+        try {
+          // Create a temporary Java file
+          const javaCode = code;
+          const className = 'Main';
+          
+          // Use CheerpJ to execute Java code
+          // @ts-ignore
+          const result = await window.cheerpjRunMain(className, javaCode);
+          setOutput(prev => prev + '\n✅ Java code executed successfully!');
+        } catch (error) {
+          setOutput(prev => prev + '\n❌ Java Error: ' + error.message);
+        }
+      } else if (language === 'cpp') {
+        // Execute C++ code using transpiler
+        if (!emscripten) {
+          setOutput(prev => prev + '❌ C++ runtime not loaded. Please wait or try again.\n');
+          return;
+        }
+        
+        try {
+          // Transpile C++ to JavaScript
+          const jsCode = emscripten.transpile(code);
+          
+          const sandbox = {
+            console: {
+              log: (...args) => setOutput(prev => prev + args.join(' ') + '\n'),
+              error: (...args) => setOutput(prev => prev + 'ERROR: ' + args.join(' ') + '\n'),
+              warn: (...args) => setOutput(prev => prev + 'WARNING: ' + args.join(' ') + '\n'),
+              info: (...args) => setOutput(prev => prev + 'INFO: ' + args.join(' ') + '\n')
+            },
+            setTimeout,
+            setInterval,
+            clearTimeout,
+            clearInterval,
+            Date,
+            Math,
+            JSON,
+            parseInt,
+            parseFloat,
+            isNaN,
+            isFinite
+          };
+
+          const result = new Function(...Object.keys(sandbox), jsCode);
+          result(...Object.values(sandbox));
+          
+          setOutput(prev => prev + '\n✅ C++ code executed successfully!');
+        } catch (error) {
+          setOutput(prev => prev + '\n❌ C++ Error: ' + error.message);
+        }
+      } else {
+        // Execute JavaScript code (existing logic)
+        const sandbox = {
+          console: {
+            log: (...args) => setOutput(prev => prev + args.join(' ') + '\n'),
+            error: (...args) => setOutput(prev => prev + 'ERROR: ' + args.join(' ') + '\n'),
+            warn: (...args) => setOutput(prev => prev + 'WARNING: ' + args.join(' ') + '\n'),
+            info: (...args) => setOutput(prev => prev + 'INFO: ' + args.join(' ') + '\n')
+          },
+          setTimeout,
+          setInterval,
+          clearTimeout,
+          clearInterval,
+          Date,
+          Math,
+          JSON,
+          parseInt,
+          parseFloat,
+          isNaN,
+          isFinite
+        };
+
+        const result = new Function(...Object.keys(sandbox), code);
+        result(...Object.values(sandbox));
+        
+        setOutput(prev => prev + '\n✅ JavaScript code executed successfully!');
+      }
     } catch (error) {
-      setOutput(prev => prev + `\n❌ Error: ${error.message}`);
+      setOutput(prev => prev + '\n❌ Error: ' + error.message);
     }
   };
 
@@ -1024,6 +1743,12 @@ Your changes are still saved locally in the IDE.`,
                 <span style={{ fontWeight: 'normal', color: '#666' }}>{fileName}</span>
               </>
             )}
+            <Chip 
+              label={language.toUpperCase()} 
+              size="small" 
+              color={language === 'python' ? 'success' : 'primary'}
+              sx={{ ml: 1 }}
+            />
           </Typography>
           
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -1031,18 +1756,48 @@ Your changes are still saved locally in the IDE.`,
               <InputLabel>Language</InputLabel>
               <Select
                 value={language}
-                onChange={(e) => setLanguage(e.target.value)}
+                onChange={(e) => handleLanguageChange(e.target.value)}
                 label="Language"
+                MenuProps={{
+                  PaperProps: {
+                    style: {
+                      maxHeight: 300,
+                      zIndex: isFullscreen ? 10000 : 1300, // Higher z-index in fullscreen
+                    },
+                  },
+                }}
               >
-                <MenuItem value="javascript">JavaScript</MenuItem>
-                <MenuItem value="typescript">TypeScript</MenuItem>
-                <MenuItem value="python">Python</MenuItem>
-                <MenuItem value="java">Java</MenuItem>
-                <MenuItem value="cpp">C++</MenuItem>
-                <MenuItem value="html">HTML</MenuItem>
-                <MenuItem value="css">CSS</MenuItem>
-                <MenuItem value="json">JSON</MenuItem>
-                <MenuItem value="markdown">Markdown</MenuItem>
+                <MenuItem value="javascript">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <span>🟨</span> JavaScript
+                  </Box>
+                </MenuItem>
+                <MenuItem value="typescript">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <span>🔷</span> TypeScript
+                  </Box>
+                </MenuItem>
+                <MenuItem value="python">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <span>🐍</span> Python
+                    {isPyodideLoading && <CircularProgress size={12} />}
+                    {pyodide && <span style={{ color: 'green' }}>✓</span>}
+                  </Box>
+                </MenuItem>
+                <MenuItem value="java">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <span>☕</span> Java
+                    {isCheerpjLoading && <CircularProgress size={12} />}
+                    {cheerpj && <span style={{ color: 'green' }}>✓</span>}
+                  </Box>
+                </MenuItem>
+                <MenuItem value="cpp">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <span>⚙️</span> C++
+                    {isEmscriptenLoading && <CircularProgress size={12} />}
+                    {emscripten && <span style={{ color: 'green' }}>✓</span>}
+                  </Box>
+                </MenuItem>
               </Select>
             </FormControl>
             
@@ -1137,16 +1892,32 @@ Your changes are still saved locally in the IDE.`,
             
             <Button
               variant="contained"
-              startIcon={<PlayArrowIcon />}
+              startIcon={
+                (isPyodideLoading && language === 'python') || 
+                (isCheerpjLoading && language === 'java') || 
+                (isEmscriptenLoading && language === 'cpp') 
+                  ? <CircularProgress size={16} color="inherit" /> 
+                  : <PlayArrowIcon />
+              }
               onClick={executeCode}
+              disabled={
+                (isPyodideLoading && language === 'python') || 
+                (isCheerpjLoading && language === 'java') || 
+                (isEmscriptenLoading && language === 'cpp')
+              }
               sx={{ 
                 background: 'linear-gradient(45deg, #4CAF50 30%, #66BB6A 90%)',
                 '&:hover': {
                   background: 'linear-gradient(45deg, #388E3C 30%, #4CAF50 90%)'
+                },
+                '&:disabled': {
+                  background: 'linear-gradient(45deg, #9E9E9E 30%, #BDBDBD 90%)'
                 }
               }}
             >
-              Run
+              {isPyodideLoading && language === 'python' ? 'Loading Python...' : 
+               isCheerpjLoading && language === 'java' ? 'Loading Java...' :
+               isEmscriptenLoading && language === 'cpp' ? 'Loading C++...' : 'Run'}
             </Button>
           </Box>
         </Box>
