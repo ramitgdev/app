@@ -56,19 +56,34 @@ class SupabaseWorkspaceStorage {
       // Filter out root folder (id: 0) as it's virtual
       const foldersToSave = folders.filter(f => f.id !== 0);
       
-      // Delete existing folders for this workspace
-      await supabase
+      // Get existing folders to avoid duplicates
+      const { data: existingFolders } = await supabase
         .from('workspace_folders')
-        .delete()
+        .select('id, name, parent_id')
         .eq('workspace_id', workspaceId);
 
-      // Insert new folders
-      if (foldersToSave.length > 0) {
-        const folderData = foldersToSave.map(folder => ({
-          id: folder.id,
+      // Create a map of existing folders by name and parent
+      const existingFolderMap = new Map();
+      existingFolders?.forEach(folder => {
+        const key = `${folder.name}-${folder.parent_id || 0}`;
+        existingFolderMap.set(key, folder);
+      });
+
+      // Filter out folders that already exist
+      const newFolders = foldersToSave.filter(folder => {
+        const key = `${folder.text}-${folder.parent === 0 ? 0 : folder.parent}`;
+        return !existingFolderMap.has(key);
+      });
+
+      console.log(`📁 Found ${existingFolders?.length || 0} existing folders, ${newFolders.length} new folders to sync`);
+
+      // Insert only new folders
+      if (newFolders.length > 0) {
+        const folderData = newFolders.map(folder => ({
+          id: Math.floor(folder.id), // Ensure integer ID
           workspace_id: workspaceId,
           name: folder.text,
-          parent_id: folder.parent === 0 ? null : folder.parent,
+          parent_id: folder.parent === 0 ? null : Math.floor(folder.parent), // Ensure integer parent_id
           created_at: folder.created_at || new Date().toISOString(),
           updated_at: new Date().toISOString()
         }));
@@ -131,15 +146,57 @@ class SupabaseWorkspaceStorage {
 
   async saveWorkspaceFiles(workspaceId, resources) {
     try {
-      // Delete existing resources for this workspace
-      await supabase
+      // Get existing files with all necessary fields
+      const { data: existingFiles } = await supabase
         .from('workspace_files')
-        .delete()
+        .select('id, title, notes, folder, folder_id')
         .eq('workspace_id', workspaceId);
 
+      // Create a map of existing files by title and content
+      const existingFileMap = new Map();
+      existingFiles?.forEach(file => {
+        const key = `${file.title}-${file.notes || ''}`;
+        existingFileMap.set(key, file);
+      });
+
+      // Separate new resources and resources that need updates
+      const newResources = [];
+      const updatePromises = [];
+
+      resources.forEach(resource => {
+        const key = `${resource.title}-${resource.notes || ''}`;
+        const existingFile = existingFileMap.get(key);
+        
+        if (!existingFile) {
+          // New file - add to insert list
+          newResources.push(resource);
+        } else {
+          // Existing file - check if folder changed
+          const currentFolder = existingFile.folder || existingFile.folder_id;
+          const newFolder = resource.folder === 0 ? null : resource.folder;
+          
+          if (currentFolder !== newFolder) {
+            // Folder changed - update the file
+            console.log(`🔄 Updating ${resource.title} folder from ${currentFolder} to ${newFolder}`);
+            updatePromises.push(
+              supabase
+                .from('workspace_files')
+                .update({
+                  folder: newFolder,
+                  folder_id: newFolder,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', existingFile.id)
+            );
+          }
+        }
+      });
+
+      console.log(`📁 Found ${existingFiles?.length || 0} existing files, ${newResources.length} new files to sync, ${updatePromises.length} files to update`);
+
       // Insert new resources
-      if (resources.length > 0) {
-        const resourceData = resources.map(resource => ({
+      if (newResources.length > 0) {
+        const resourceData = newResources.map(resource => ({
           // Don't set id - let Supabase generate it
           workspace_id: workspaceId,
           title: resource.title,
@@ -166,6 +223,12 @@ class SupabaseWorkspaceStorage {
           console.error('Error saving workspace files:', error);
           throw error;
         }
+      }
+
+      // Update existing files that changed folders
+      if (updatePromises.length > 0) {
+        await Promise.all(updatePromises);
+        console.log(`✅ Updated ${updatePromises.length} files with new folder locations`);
       }
 
       this.cache.set(`resources-${workspaceId}`, resources);

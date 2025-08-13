@@ -887,9 +887,12 @@ function ChatWindow({workspaceId, currentUserId, collaborators}) {
   );
 }
 
+// Counter for generating unique folder IDs
+let folderIdCounter = 1000;
+
 function makeFolder(name, parent, id = null) {
   return {
-    id: id ?? Date.now() + Math.random(),
+    id: id ?? ++folderIdCounter, // Use simple counter to ensure INTEGER compatibility
     parent,
     text: name,
     droppable: true
@@ -4924,17 +4927,29 @@ useEffect(() => {
   useEffect(() => { saveData(wsId, "resources", resources); }, [resources, wsId]);
 
   // Background Supabase sync (secondary storage for sharing)
+  const [lastSyncTime, setLastSyncTime] = useState(0);
+  
   useEffect(() => {
     async function syncToSupabase() {
       if (!selectedWksp?.id) return;
       
+      // Prevent rapid successive syncs (debounce)
+      const now = Date.now();
+      if (now - lastSyncTime < 2000) { // Wait at least 2 seconds between syncs
+        return;
+      }
+      
       try {
+        console.log('🔄 Starting background sync to Supabase...');
+        
         // Sync folders and resources to Supabase in the background
         await Promise.all([
           supabaseWorkspaceStorage.saveFolders(selectedWksp.id, folders),
           supabaseWorkspaceStorage.saveWorkspaceFiles(selectedWksp.id, resources)
         ]);
-        console.log('Background sync to Supabase completed');
+        
+        setLastSyncTime(now);
+        console.log('✅ Background sync to Supabase completed');
       } catch (error) {
         console.error('Background Supabase sync failed:', error);
         // Don't show error to user - this is just for sharing
@@ -4945,7 +4960,7 @@ useEffect(() => {
     if (selectedWksp?.id && (folders.length > 1 || resources.length > 0)) {
       syncToSupabase();
     }
-  }, [folders, resources, selectedWksp?.id]);
+  }, [folders, resources, selectedWksp?.id, lastSyncTime]);
 
 
   // --- Other UI states ---
