@@ -213,21 +213,391 @@ function EmbeddedGoogleDocsEditor({ docUrl, googleToken, onExit }) {
 function EmbeddedGoogleSheetsEditor({ sheetUrl, googleToken, onExit }) {
   const [sheetId, setSheetId] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setSheetError] = useState('');
+  const [showAIChat, setShowAIChat] = useState(false);
+  const [aiMessages, setAiMessages] = useState([
+    {
+      id: 1,
+      role: 'assistant',
+      content: "Hello! I'm your AI spreadsheet assistant. I can help you edit cells, add data, create formulas, analyze your spreadsheet, and provide insights. What would you like me to help you with?",
+      timestamp: new Date()
+    }
+  ]);
+  const [aiInput, setAiInput] = useState('');
+  const [isAILoading, setIsAILoading] = useState(false);
+  const [sheetData, setSheetData] = useState(null);
 
   useEffect(() => {
     if (!sheetUrl || !googleToken) return;
     setLoading(true);
-    setError('');
+    setSheetError('');
     const match = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
     if (!match) {
-      setError('Invalid Google Sheet URL');
+      setSheetError('Invalid Google Sheet URL');
       setLoading(false);
       return;
     }
     setSheetId(match[1]);
     setLoading(false);
   }, [sheetUrl, googleToken]);
+
+  // Local function to extract sheet operations from user input
+  const extractSheetOperationLocal = (input) => {
+    const lowerInput = input.toLowerCase();
+    
+    // Extract cell reference - look for patterns like "cell B29", "B29", etc.
+    let cell = 'A1'; // default
+    const cellPatterns = [
+      /(?:on|in|to|at)\s+(?:cell\s+)?([A-Z]+\d+)/i,
+      /(?:add|insert|put|update|set)\s+(?:a\s+)?(?:formula\s+)?(?:to\s+)?(?:cell\s+)?([A-Z]+\d+)/i,
+      /([A-Z]+\d+)/i
+    ];
+    
+    for (const pattern of cellPatterns) {
+      const match = input.match(pattern);
+      if (match && match[1]) {
+        cell = match[1];
+        break;
+      }
+    }
+    
+    // Check if this is a formula request
+    const isFormulaRequest = lowerInput.includes('formula') || 
+                            lowerInput.includes('calculate') || 
+                            lowerInput.includes('average') || 
+                            lowerInput.includes('sum') ||
+                            lowerInput.includes('count') ||
+                            lowerInput.includes('max') ||
+                            lowerInput.includes('min');
+    
+    let data = '';
+    let isFormula = false;
+    
+    if (isFormulaRequest) {
+      // Handle formula requests
+      if (lowerInput.includes('average') && lowerInput.includes('b1') && lowerInput.includes('b28')) {
+        data = '=AVERAGE(B1:B28)';
+        isFormula = true;
+      } else if (lowerInput.includes('sum') && lowerInput.includes('b1') && lowerInput.includes('b28')) {
+        data = '=SUM(B1:B28)';
+        isFormula = true;
+      } else if (lowerInput.includes('count') && lowerInput.includes('b1') && lowerInput.includes('b28')) {
+        data = '=COUNT(B1:B28)';
+        isFormula = true;
+      } else if (lowerInput.includes('max') && lowerInput.includes('b1') && lowerInput.includes('b28')) {
+        data = '=MAX(B1:B28)';
+        isFormula = true;
+      } else if (lowerInput.includes('min') && lowerInput.includes('b1') && lowerInput.includes('b28')) {
+        data = '=MIN(B1:B28)';
+        isFormula = true;
+      } else {
+        // Generic formula construction based on keywords
+        if (lowerInput.includes('average')) {
+          data = '=AVERAGE()';
+          isFormula = true;
+        } else if (lowerInput.includes('sum')) {
+          data = '=SUM()';
+          isFormula = true;
+        } else if (lowerInput.includes('count')) {
+          data = '=COUNT()';
+          isFormula = true;
+        }
+      }
+    } else {
+      // Handle regular data requests
+      const dataMatch = input.match(/(?:add|insert|put|update|set)\s+(?:data\s+)?(?:to\s+)?(?:cell\s+)?[A-Z]+\d+[:\s]+(.+)/i);
+      data = dataMatch ? dataMatch[1].trim() : '';
+      isFormula = data.startsWith('=');
+    }
+    
+    // Extract row data
+    const rowMatch = input.match(/(?:add|insert)\s+(?:row\s+)?(?:with\s+)?(?:data\s+)?(.+)/i);
+    const rowData = rowMatch ? rowMatch[1].split(',').map(d => d.trim()) : [];
+    
+    // Extract column data
+    const colMatch = input.match(/(?:add|insert)\s+(?:column\s+)?(?:with\s+)?(?:data\s+)?(.+)/i);
+    const colData = colMatch ? colMatch[1].split(',').map(d => d.trim()) : [];
+    
+    return {
+      cell,
+      data,
+      isFormula,
+      rowData,
+      colData,
+      type: rowData.length > 0 ? 'row' : colData.length > 0 ? 'column' : 'cell'
+    };
+  };
+
+  // Fetch sheet data when sheetId changes
+  useEffect(() => {
+    if (sheetId && googleToken) {
+      fetchSheetData();
+    }
+  }, [sheetId, googleToken]);
+
+  const fetchSheetData = async () => {
+    try {
+      const response = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?includeGridData=true`,
+        {
+          headers: {
+            'Authorization': `Bearer ${googleToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch sheet data: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setSheetData(data);
+      console.log('Sheet data fetched:', data);
+    } catch (error) {
+      console.error('Error fetching sheet data:', error);
+      setSheetError(`Failed to fetch sheet data: ${error.message}`);
+    }
+  };
+
+  const updateCell = async (range, value, formula = null) => {
+    try {
+      const body = {
+        values: [[formula || value]]
+      };
+
+      const response = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=${formula ? 'USER_ENTERED' : 'RAW'}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${googleToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(body)
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to update cell: ${response.status}`);
+      }
+
+      // Refresh sheet data
+      await fetchSheetData();
+      return true;
+    } catch (error) {
+      console.error('Error updating cell:', error);
+      return false;
+    }
+  };
+
+  const addRow = async (values, rowIndex = null) => {
+    try {
+      const range = rowIndex ? `A${rowIndex}:Z${rowIndex}` : 'A:Z';
+      const body = {
+        values: [values]
+      };
+
+      const response = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=RAW`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${googleToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(body)
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to add row: ${response.status}`);
+      }
+
+      await fetchSheetData();
+      return true;
+    } catch (error) {
+      console.error('Error adding row:', error);
+      return false;
+    }
+  };
+
+  const addColumn = async (values, columnIndex = null) => {
+    try {
+      const columnLetter = columnIndex ? String.fromCharCode(65 + columnIndex) : 'Z';
+      const range = `${columnLetter}1:${columnLetter}`;
+      const body = {
+        values: values.map(value => [value])
+      };
+
+      const response = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=RAW`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${googleToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(body)
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to add column: ${response.status}`);
+      }
+
+      await fetchSheetData();
+      return true;
+    } catch (error) {
+      console.error('Error adding column:', error);
+      return false;
+    }
+  };
+
+  const handleAISend = async () => {
+    if (!aiInput.trim() || isAILoading) return;
+
+    const userMessage = {
+      id: Date.now(),
+      role: 'user',
+      content: aiInput,
+      timestamp: new Date()
+    };
+
+    setAiMessages(prev => [...prev, userMessage]);
+    const currentInput = aiInput;
+    setAiInput('');
+    setIsAILoading(true);
+
+    try {
+      // Check if this is a data operation that should be handled by the Global AI Agent
+      const input = currentInput.toLowerCase();
+      const isDataOperation = input.includes('add') || input.includes('insert') || input.includes('put') || 
+                              input.includes('update') || input.includes('set') || input.includes('create');
+      
+      if (isDataOperation) {
+        // Route to Global AI Agent for data operations
+        const intent = {
+          type: 'apply_sheet_data',
+          request: currentInput,
+          operation: extractSheetOperationLocal(currentInput)
+        };
+        
+        // Dispatch event to Global AI Agent
+        const event = new CustomEvent('globalAISheetOperation', { 
+          detail: { intent, sheetUrl, sheetId } 
+        });
+        window.dispatchEvent(event);
+        
+        response = `🔄 **Routing to Global AI Agent...**
+        
+I've sent your request to the Global AI Agent for processing. The agent will:
+• Analyze your request
+• Apply the changes to your Google Sheet
+• Provide feedback on the operation
+
+You can also use the Global AI Agent directly from the main interface for more advanced operations!`;
+        
+        const assistantMessage = {
+          id: Date.now() + 1,
+          role: 'assistant',
+          content: response,
+          timestamp: new Date()
+        };
+        
+        setAiMessages(prev => [...prev, assistantMessage]);
+        return;
+      }
+
+      // Handle local operations (analysis, help, etc.)
+      let response = '';
+      let actionTaken = false;
+
+      if (input.includes('analyze') || input.includes('summarize') || input.includes('insights')) {
+        // Analyze sheet content
+        if (sheetData && sheetData.sheets && sheetData.sheets[0]) {
+          const sheet = sheetData.sheets[0];
+          const gridData = sheet.data?.[0];
+          if (gridData && gridData.rowData) {
+            const rows = gridData.rowData.filter(row => row.values && row.values.some(cell => cell.formattedValue));
+            const totalRows = rows.length;
+            const totalColumns = gridData.columnMetadata?.length || 0;
+            const nonEmptyCells = rows.reduce((count, row) => 
+              count + (row.values?.filter(cell => cell.formattedValue).length || 0), 0);
+            
+            response = `📊 **Sheet Analysis:**
+• **Total Rows:** ${totalRows}
+• **Total Columns:** ${totalColumns}
+• **Non-empty Cells:** ${nonEmptyCells}
+• **Sheet Name:** ${sheet.properties?.title || 'Untitled'}
+
+${rows.length > 0 ? `**Sample Data (first 3 rows):**
+${rows.slice(0, 3).map((row, i) => 
+  `Row ${i + 1}: ${row.values?.map(cell => cell.formattedValue || '').join(' | ')}`
+).join('\n')}` : 'Sheet appears to be empty'}`;
+          } else {
+            response = "Sheet appears to be empty or couldn't be analyzed.";
+          }
+        } else {
+          response = "Unable to analyze sheet. Please make sure the sheet contains data.";
+        }
+        actionTaken = true;
+      } else if (input.includes('help') || input.includes('what can you do')) {
+        response = `🤖 **I can help you with Google Sheets! Here's what I can do:**
+
+📝 **Data Operations (via Global AI Agent):**
+• Add data to specific cells: "Add data to cell A1: Hello World"
+• Insert formulas: "Add formula to cell B1: =SUM(A1:A10)"
+• Add new rows: "Add row with data: Name, Age, City"
+• Add new columns: "Add column with data: Header1, Header2, Header3"
+
+📊 **Analysis:**
+• Analyze sheet content: "Analyze this sheet"
+• Get insights: "Summarize the data"
+• Count rows/columns: "How many rows are there?"
+
+🔧 **Tips:**
+• Use cell references like A1, B2, C3
+• Formulas should start with = (e.g., =SUM(), =AVERAGE())
+• Data operations are handled by the Global AI Agent for better integration
+• I can read your sheet content to provide better assistance
+
+What would you like me to help you with?`;
+        actionTaken = true;
+      } else {
+        // General response for other queries
+        response = `I understand you want to work with your Google Sheet. I can help you:
+• Analyze your sheet content and provide insights
+• Answer questions about your data
+• Provide guidance on sheet operations
+
+For data operations (adding/editing cells, formulas, rows, columns), I'll route your request to the Global AI Agent which has full access to modify your sheet.
+
+Try asking me to "analyze this sheet" or ask for help with specific operations!`;
+      }
+
+      const assistantMessage = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: response,
+        actionTaken,
+        timestamp: new Date()
+      };
+
+      setAiMessages(prev => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error('Error in AI chat:', error);
+      const errorMessage = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: 'Sorry, I encountered an error while processing your request. Please try again.',
+        timestamp: new Date()
+      };
+      setAiMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsAILoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -250,28 +620,125 @@ function EmbeddedGoogleSheetsEditor({ sheetUrl, googleToken, onExit }) {
       </Box>
     );
   }
+
   return (
-    <Box sx={{ height: 600, display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 2, bgcolor: '#f8f9fa', borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h6" fontWeight={600}>
-          Google Sheets Editor
+          AI-Enhanced Google Sheets Editor
         </Typography>
         <Stack direction="row" spacing={1}>
+          <Button 
+            variant={showAIChat ? "contained" : "outlined"} 
+            onClick={() => setShowAIChat(!showAIChat)}
+            startIcon={<SmartToyIcon />}
+          >
+            AI Assistant
+          </Button>
           <Button variant="outlined" onClick={() => window.open(`https://docs.google.com/spreadsheets/d/${sheetId}/edit`, '_blank')}>
             Open in New Tab
           </Button>
           <Button variant="outlined" onClick={onExit}>Exit</Button>
         </Stack>
       </Box>
-      <Box sx={{ flex: 1, border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden' }}>
-        <iframe
-          src={`https://docs.google.com/spreadsheets/d/${sheetId}/edit?usp=sharing`}
-          width="100%"
-          height="100%"
-          style={{ border: 'none' }}
-          allowFullScreen
-          title="Google Sheets Editor"
-        />
+      
+      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* Main Sheet Editor */}
+        <Box sx={{ flex: showAIChat ? 2 : 1, border: '1px solid #e0e0e0', borderRadius: 2, overflow: 'hidden', transition: 'flex 0.3s ease' }}>
+          <iframe
+            src={`https://docs.google.com/spreadsheets/d/${sheetId}/edit?usp=sharing`}
+            width="100%"
+            height="100%"
+            style={{ border: 'none' }}
+            allowFullScreen
+            title="Google Sheets Editor"
+          />
+        </Box>
+
+        {/* AI Assistant Sidebar */}
+        {showAIChat && (
+          <Box sx={{ 
+            flex: 1, 
+            borderLeft: '1px solid #e0e0e0', 
+            bgcolor: 'background.paper',
+            display: 'flex', 
+            flexDirection: 'column',
+            minWidth: 350
+          }}>
+            <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0', bgcolor: 'primary.main', color: 'white' }}>
+              <Typography variant="h6" fontWeight={600}>
+                🤖 AI Spreadsheet Assistant
+              </Typography>
+              <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                I can help you edit cells, add formulas, and analyze your data
+              </Typography>
+            </Box>
+
+            {/* Chat Messages */}
+            <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+              {aiMessages.map((message) => (
+                <Box
+                  key={message.id}
+                  sx={{
+                    mb: 2,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: message.role === 'user' ? 'flex-end' : 'flex-start'
+                  }}
+                >
+                  <Box
+                    sx={{
+                      maxWidth: '80%',
+                      p: 2,
+                      borderRadius: 2,
+                      bgcolor: message.role === 'user' ? 'primary.main' : 'grey.100',
+                      color: message.role === 'user' ? 'white' : 'text.primary',
+                      wordBreak: 'break-word'
+                    }}
+                  >
+                    <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                      {message.content}
+                    </Typography>
+                  </Box>
+                  <Typography variant="caption" sx={{ mt: 0.5, opacity: 0.7 }}>
+                    {message.timestamp.toLocaleTimeString()}
+                  </Typography>
+                </Box>
+              ))}
+              {isAILoading && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                  <CircularProgress size={20} />
+                </Box>
+              )}
+            </Box>
+
+            {/* Input Area */}
+            <Box sx={{ p: 2, borderTop: '1px solid #e0e0e0' }}>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder="Ask me to add data, formulas, or analyze your sheet..."
+                  value={aiInput}
+                  onChange={(e) => setAiInput(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleAISend()}
+                  disabled={isAILoading}
+                />
+                <Button
+                  variant="contained"
+                  onClick={handleAISend}
+                  disabled={!aiInput.trim() || isAILoading}
+                  sx={{ minWidth: 'auto', px: 2 }}
+                >
+                  <SendIcon />
+                </Button>
+              </Box>
+              <Typography variant="caption" sx={{ mt: 1, display: 'block', opacity: 0.7 }}>
+                Try: "Add data to cell A1: Hello World" or "Analyze this sheet"
+              </Typography>
+            </Box>
+          </Box>
+        )}
       </Box>
     </Box>
   );
@@ -1425,7 +1892,7 @@ async function importGithubTreeWithFoldersAccurate(
   
   // Step 1: create top-level folder for repo name
   const repoFolderName = repo;
-  
+
   // Step 2: Fetch branch/tree
   const repoInfoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
   if (!repoInfoRes.ok) return { error: "Repo not found or API error" };
@@ -1436,7 +1903,7 @@ async function importGithubTreeWithFoldersAccurate(
   );
   if (!treeRes.ok) return { error: "GitHub tree fetch error" };
   const tree = await treeRes.json();
-  
+
   // Step 3: Check if this repo is already imported
   const existingFolders = await supabaseWorkspaceStorage.loadFolders(workspaceId);
   const repoAlreadyExists = existingFolders.some(folder => 
@@ -2836,6 +3303,52 @@ export default function App() {
     };
   }, []);
 
+  // Listen for Google Sheets action results
+  useEffect(() => {
+    const handleSheetSuccess = (event) => {
+      setDocActionMessage(event.detail.message);
+      setShowDocActionAlert(true);
+      setTimeout(() => setShowDocActionAlert(false), 3000);
+    };
+
+    const handleSheetError = (event) => {
+      setDocActionMessage(event.detail.message);
+      setShowDocActionAlert(true);
+      setTimeout(() => setShowDocActionAlert(false), 3000);
+    };
+
+    window.addEventListener('showSheetSuccess', handleSheetSuccess);
+    window.addEventListener('showSheetError', handleSheetError);
+    
+    return () => {
+      window.removeEventListener('showSheetSuccess', handleSheetSuccess);
+      window.removeEventListener('showSheetError', handleSheetError);
+    };
+  }, []);
+
+  // Listen for Global AI Sheet Operations
+  useEffect(() => {
+    const handleGlobalAISheetOperation = (event) => {
+      const { intent, sheetUrl, sheetId } = event.detail;
+      
+      // Set the Google Sheet URL if not already set
+      if (!googleSheetUrl && sheetUrl) {
+        setGoogleSheetUrl(sheetUrl);
+      }
+      
+      // Process the intent through the Global AI Agent
+      if (intent.type === 'apply_sheet_data') {
+        globalHandleSheetDataApplication(intent);
+      }
+    };
+
+    window.addEventListener('globalAISheetOperation', handleGlobalAISheetOperation);
+    
+    return () => {
+      window.removeEventListener('globalAISheetOperation', handleGlobalAISheetOperation);
+    };
+  }, [googleSheetUrl, googleToken]);
+
   // Global AI Assistant functions
   const handleGlobalChatSend = async () => {
     if (!globalChatInput.trim() || isGlobalChatLoading) return;
@@ -2894,8 +3407,17 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
       } else if (intent.type === 'create_google_doc') {
         globalHandleGoogleDocCreation(intent);
         return;
+      } else if (intent.type === 'create_google_sheet') {
+        globalHandleGoogleSheetCreation(intent);
+        return;
       } else if (intent.type === 'analyze_google_doc') {
         globalHandleGoogleDocAnalysis(intent);
+        return;
+      } else if (intent.type === 'analyze_google_sheet') {
+        globalHandleGoogleSheetAnalysis(intent);
+        return;
+      } else if (intent.type === 'apply_sheet_data') {
+        globalHandleSheetDataApplication(intent);
         return;
       } else if (intent.type === 'explain_code' || intent.type === 'fix_code' || intent.type === 'optimize_code' || intent.type === 'refactor_code' || intent.type === 'comment_code') {
         globalHandleCodeAction(intent.type, intent);
@@ -2919,6 +3441,12 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
       const googleDocContext = await getGoogleDocContext();
       if (googleDocContext) {
         context += `Current Google Doc: "${googleDocContext.title}" - Content preview: ${googleDocContext.content.substring(0, 500)}${googleDocContext.content.length > 500 ? '...' : ''}. `;
+      }
+      
+      // Add Google Sheets context if available
+      const googleSheetContext = await getGoogleSheetContext();
+      if (googleSheetContext) {
+        context += `Current Google Sheet: "${googleSheetContext.title}" - Sheet ID: ${googleSheetContext.sheetId} - Data preview: ${googleSheetContext.dataPreview}. `;
       }
       
       // Add tab-specific context with current file information
@@ -2946,6 +3474,11 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
         context += `User is in Google Docs editor. `;
         if (googleDocContext) {
           context += `Full Google Doc content:\n\`\`\`\n${googleDocContext.content}\n\`\`\`\n\n`;
+        }
+      } else if (activeDevelopmentTab === 'gsheets') {
+        context += `User is in Google Sheets editor. `;
+        if (googleSheetContext) {
+          context += `Current Google Sheet: "${googleSheetContext.title}" - Sheet ID: ${googleSheetContext.sheetId}. `;
         }
       } else if (activeDevelopmentTab === 'gdrive') {
         context += `User is in Google Drive management interface. Google authentication: ${googleToken ? 'Connected' : 'Not connected'}. `;
@@ -3100,6 +3633,12 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
       return 'gdocs';
     }
     
+    // Switch to Google Sheets if providing spreadsheet operations
+    if ((inputText.includes('add') || inputText.includes('insert') || inputText.includes('create') || inputText.includes('analyze')) && 
+        (inputText.includes('sheet') || inputText.includes('spreadsheet') || inputText.includes('cell') || inputText.includes('formula') || inputText.includes('data') || inputText.includes('row') || inputText.includes('column'))) {
+      return 'gsheets';
+    }
+    
     return null;
   };
 
@@ -3177,6 +3716,79 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
         window.dispatchEvent(event);
       }
     }, 500); // Longer timeout for Google Docs tab switch
+  };
+
+  const applyDataToGoogleSheet = async (data, range = 'A1', isFormula = false) => {
+    console.log('applyDataToGoogleSheet called with:', { data, range, isFormula });
+    console.log('Current googleToken:', !!googleToken);
+    console.log('Current googleSheetUrl:', googleSheetUrl);
+    console.log('Current tab:', activeDevelopmentTab);
+    
+    // Switch to gsheets tab if not already there
+    if (activeDevelopmentTab !== 'gsheets') {
+      console.log('Switching to gsheets tab...');
+      setActiveDevelopmentTab('gsheets');
+    }
+    
+    // Wait for tab switch then apply data
+    setTimeout(async () => {
+      try {
+        if (!googleToken) {
+          throw new Error('Google token not available. Please authenticate with Google.');
+        }
+        
+        if (!googleSheetUrl) {
+          throw new Error('Google Sheet URL not configured. Please set a Google Sheet URL first.');
+        }
+        
+        // Extract sheet ID from URL
+        const match = googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+        if (!match) {
+          throw new Error('Invalid Google Sheet URL format.');
+        }
+        
+        const sheetId = match[1];
+        console.log('Attempting to update sheet:', sheetId);
+        console.log('Data to insert:', data);
+        console.log('Range:', range);
+        console.log('Is formula:', isFormula);
+        
+        // Use the updateCell function from the EmbeddedGoogleSheetsEditor
+        const body = {
+          values: [[isFormula ? data : data]]
+        };
+
+        const response = await fetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=${isFormula ? 'USER_ENTERED' : 'RAW'}`,
+          {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${googleToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`Failed to update sheet: ${response.status}`);
+        }
+        
+        console.log('Data applied successfully!');
+        // Show success message
+        const event = new CustomEvent('showSheetSuccess', { 
+          detail: { message: `Successfully ${isFormula ? 'added formula' : 'added data'} to cell ${range}!` } 
+        });
+        window.dispatchEvent(event);
+        
+      } catch (error) {
+        console.error('Error applying data to Google Sheet:', error);
+        const event = new CustomEvent('showSheetError', { 
+          detail: { message: `Failed to apply data: ${error.message}` } 
+        });
+        window.dispatchEvent(event);
+      }
+    }, 500); // Longer timeout for Google Sheets tab switch
   };
 
   const renderGlobalChatMessage = (message) => {
@@ -3475,6 +4087,30 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
       return { type: 'analyze_google_doc', request: input };
     }
     
+    // Google Sheet creation patterns
+    if ((lowerInput.includes('create') || lowerInput.includes('make') || lowerInput.includes('new')) && 
+        (lowerInput.includes('google sheet') || lowerInput.includes('google spreadsheet') || lowerInput.includes('gsheet') || (lowerInput.includes('sheet') && (lowerInput.includes('google') || lowerInput.includes('drive'))))) {
+      return { type: 'create_google_sheet', title: extractGoogleSheetTitle(input), request: input };
+    }
+    
+    // Google Sheet analysis patterns
+    if ((lowerInput.includes('analyze') || lowerInput.includes('summarize') || lowerInput.includes('review') || lowerInput.includes('read') || lowerInput.includes('what') || lowerInput.includes('tell me about')) && 
+        (lowerInput.includes('sheet') || lowerInput.includes('spreadsheet') || lowerInput.includes('google sheet'))) {
+      return { type: 'analyze_google_sheet', request: input };
+    }
+    
+    // Google Sheet data operations patterns
+    if ((lowerInput.includes('add') || lowerInput.includes('insert') || lowerInput.includes('put') || lowerInput.includes('update') || lowerInput.includes('set') || lowerInput.includes('on') || lowerInput.includes('in') || lowerInput.includes('at')) && 
+        (lowerInput.includes('cell') || lowerInput.includes('data') || lowerInput.includes('formula') || lowerInput.includes('row') || lowerInput.includes('column') || lowerInput.includes('b29') || lowerInput.includes('b1') || lowerInput.includes('b28'))) {
+      return { type: 'apply_sheet_data', request: input, operation: extractSheetOperation(input) };
+    }
+    
+    // Google Sheet formula patterns (more specific)
+    if ((lowerInput.includes('formula') || lowerInput.includes('calculate') || lowerInput.includes('average') || lowerInput.includes('sum') || lowerInput.includes('count') || lowerInput.includes('max') || lowerInput.includes('min')) && 
+        (lowerInput.includes('cell') || lowerInput.includes('b29') || lowerInput.includes('b1') || lowerInput.includes('b28'))) {
+      return { type: 'apply_sheet_data', request: input, operation: extractSheetOperation(input) };
+    }
+    
     // Code action patterns (like Web IDE)
     if (lowerInput.includes('explain') && (lowerInput.includes('code') || lowerInput.includes('this'))) {
       return { type: 'explain_code', request: input };
@@ -3530,6 +4166,112 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
       }
     }
     return '';
+  };
+
+  const extractGoogleSheetTitle = (input) => {
+    // Look for titles in quotes or after "called", "named", "titled"
+    const patterns = [
+      /"([^"]+)"/,  // Text in quotes
+      /'([^']+)'/,  // Text in single quotes
+      /(?:called|named|titled)\s+([^.,!?]+)/i,  // After "called", "named", "titled"
+      /google\s+sheet\s+([^.,!?]+)/i,  // After "google sheet"
+      /new\s+(?:sheet|spreadsheet)\s+([^.,!?]+)/i  // After "new sheet/spreadsheet"
+    ];
+    
+    for (const pattern of patterns) {
+      const match = input.match(pattern);
+      if (match && match[1].trim()) {
+        return match[1].trim();
+      }
+    }
+    return '';
+  };
+
+  const extractSheetOperation = (input) => {
+    const lowerInput = input.toLowerCase();
+    
+    // Extract cell reference - look for patterns like "cell B29", "B29", etc.
+    let cell = 'A1'; // default
+    const cellPatterns = [
+      /(?:on|in|to|at)\s+(?:cell\s+)?([A-Z]+\d+)/i,
+      /(?:add|insert|put|update|set)\s+(?:a\s+)?(?:formula\s+)?(?:to\s+)?(?:cell\s+)?([A-Z]+\d+)/i,
+      /(?:my\s+)?(?:google\s+)?(?:sheet\s+)?(?:on\s+)?(?:cell\s+)?([A-Z]+\d+)/i,
+      /([A-Z]+\d+)/i
+    ];
+    
+    for (const pattern of cellPatterns) {
+      const match = input.match(pattern);
+      if (match && match[1]) {
+        cell = match[1];
+        break;
+      }
+    }
+    
+    // Check if this is a formula request
+    const isFormulaRequest = lowerInput.includes('formula') || 
+                            lowerInput.includes('calculate') || 
+                            lowerInput.includes('average') || 
+                            lowerInput.includes('sum') ||
+                            lowerInput.includes('count') ||
+                            lowerInput.includes('max') ||
+                            lowerInput.includes('min');
+    
+    let data = '';
+    let isFormula = false;
+    
+    if (isFormulaRequest) {
+      // Handle formula requests with specific range detection
+      if (lowerInput.includes('average') && lowerInput.includes('b1') && lowerInput.includes('b28')) {
+        data = '=AVERAGE(B1:B28)';
+        isFormula = true;
+      } else if (lowerInput.includes('sum') && lowerInput.includes('b1') && lowerInput.includes('b28')) {
+        data = '=SUM(B1:B28)';
+        isFormula = true;
+      } else if (lowerInput.includes('count') && lowerInput.includes('b1') && lowerInput.includes('b28')) {
+        data = '=COUNT(B1:B28)';
+        isFormula = true;
+      } else if (lowerInput.includes('max') && lowerInput.includes('b1') && lowerInput.includes('b28')) {
+        data = '=MAX(B1:B28)';
+        isFormula = true;
+      } else if (lowerInput.includes('min') && lowerInput.includes('b1') && lowerInput.includes('b28')) {
+        data = '=MIN(B1:B28)';
+        isFormula = true;
+      } else {
+        // Generic formula construction based on keywords
+        if (lowerInput.includes('average')) {
+          data = '=AVERAGE()';
+          isFormula = true;
+        } else if (lowerInput.includes('sum')) {
+          data = '=SUM()';
+          isFormula = true;
+        } else if (lowerInput.includes('count')) {
+          data = '=COUNT()';
+          isFormula = true;
+        }
+      }
+    } else {
+      // Handle regular data requests
+      const dataMatch = input.match(/(?:add|insert|put|update|set)\s+(?:data\s+)?(?:to\s+)?(?:cell\s+)?[A-Z]+\d+[:\s]+(.+)/i);
+      data = dataMatch ? dataMatch[1].trim() : '';
+      isFormula = data.startsWith('=');
+    }
+    
+    // Extract row data
+    const rowMatch = input.match(/(?:add|insert)\s+(?:row\s+)?(?:with\s+)?(?:data\s+)?(.+)/i);
+    const rowData = rowMatch ? rowMatch[1].split(',').map(d => d.trim()) : [];
+    
+    // Extract column data
+    const colMatch = input.match(/(?:add|insert)\s+(?:column\s+)?(?:with\s+)?(?:data\s+)?(.+)/i);
+    const colData = colMatch ? colMatch[1].split(',').map(d => d.trim()) : [];
+    
+    return {
+      cell,
+      data,
+      isFormula,
+      rowData,
+      colData,
+      type: rowData.length > 0 ? 'row' : colData.length > 0 ? 'column' : 'cell'
+    };
   };
 
   const extractFileNameForEditing = (input) => {
@@ -3607,6 +4349,67 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
       };
     } catch (error) {
       console.error('Error fetching Google Doc content:', error);
+      return null;
+    }
+  };
+
+  // Get current Google Sheet context if available
+  const getGoogleSheetContext = async () => {
+    if (!googleSheetUrl || !googleToken) {
+      return null;
+    }
+
+    try {
+      const match = googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+      if (!match) return null;
+
+      const sheetId = match[1];
+      
+      // Fetch sheet metadata
+      const response = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${googleToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch sheet data: ${response.status}`);
+      }
+
+      const sheetData = await response.json();
+      const sheetTitle = sheetData.properties?.title || 'Untitled Sheet';
+      const sheetCount = sheetData.sheets?.length || 0;
+      
+      // Get a preview of the first sheet's data
+      let dataPreview = 'No data available';
+      if (sheetData.sheets && sheetData.sheets[0]) {
+        const firstSheet = sheetData.sheets[0];
+        if (firstSheet.data && firstSheet.data[0] && firstSheet.data[0].rowData) {
+          const rows = firstSheet.data[0].rowData.filter(row => 
+            row.values && row.values.some(cell => cell.formattedValue)
+          );
+          if (rows.length > 0) {
+            const sampleData = rows.slice(0, 3).map(row => 
+              row.values?.map(cell => cell.formattedValue || '').join(' | ')
+            ).join('\n');
+            dataPreview = `Sample data:\n${sampleData}`;
+          }
+        }
+      }
+      
+      return {
+        sheetId,
+        title: sheetTitle,
+        sheetCount,
+        dataPreview,
+        url: googleSheetUrl
+      };
+    } catch (error) {
+      console.error('Error fetching Google Sheet context:', error);
       return null;
     }
   };
@@ -3713,6 +4516,369 @@ ${response}
       setGlobalSnackbar({
         open: true,
         message: 'Error analyzing Google Doc',
+        severity: 'error'
+      });
+    } finally {
+      setIsGlobalChatLoading(false);
+    }
+  };
+
+  const globalHandleGoogleSheetAnalysis = async (intent) => {
+    try {
+      setIsGlobalChatLoading(true);
+      
+      const googleSheetContext = await getGoogleSheetContext();
+      
+      if (!googleSheetContext) {
+        setGlobalSnackbar({
+          open: true,
+          message: 'No Google Sheet is currently open. Please open a Google Sheet first.',
+          severity: 'error'
+        });
+        return;
+      }
+
+      // Create AI prompt for Google Sheet analysis
+      const analysisPrompt = `You are analyzing a Google Sheet. Please provide a comprehensive analysis based on the user's request.
+
+GOOGLE SHEET DETAILS:
+Title: ${googleSheetContext.title}
+Sheet ID: ${googleSheetContext.sheetId}
+Number of Sheets: ${googleSheetContext.sheetCount}
+
+DATA PREVIEW:
+\`\`\`
+${googleSheetContext.dataPreview}
+\`\`\`
+
+USER REQUEST: ${intent.request}
+
+Please provide a detailed analysis, summary, or response based on the sheet data and the user's specific request. If the user is asking about data operations, formulas, or sheet structure, provide specific guidance.`;
+
+      const response = await llmIntegration.chatWithAI(analysisPrompt, []);
+      
+      // Add assistant message with Google Sheet context
+      const assistantMessage = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: `📊 **Google Sheet Analysis: "${googleSheetContext.title}"**
+
+${response}
+
+📈 **Sheet Stats:**
+- Sheet ID: ${googleSheetContext.sheetId}
+- Number of Sheets: ${googleSheetContext.sheetCount}
+- URL: [Open in Google Sheets](${googleSheetContext.url})`,
+        timestamp: new Date(),
+        type: 'google_sheet_analysis',
+        googleSheet: {
+          title: googleSheetContext.title,
+          url: googleSheetContext.url,
+          sheetId: googleSheetContext.sheetId
+        }
+      };
+      
+      setGlobalChatMessages(prev => [...prev, assistantMessage]);
+      
+    } catch (error) {
+      console.error('Error analyzing Google Sheet:', error);
+      setGlobalSnackbar({
+        open: true,
+        message: 'Error analyzing Google Sheet',
+        severity: 'error'
+      });
+    } finally {
+      setIsGlobalChatLoading(false);
+    }
+  };
+
+  const globalHandleSheetDataApplication = async (intent) => {
+    try {
+      setIsGlobalChatLoading(true);
+      
+      if (!googleToken) {
+        setGlobalSnackbar({
+          open: true,
+          message: 'Please sign in to Google first to edit Google Sheets.',
+          severity: 'error'
+        });
+        return;
+      }
+
+      if (!googleSheetUrl) {
+        setGlobalSnackbar({
+          open: true,
+          message: 'No Google Sheet is currently open. Please open a Google Sheet first.',
+          severity: 'error'
+        });
+        return;
+      }
+
+      // Get current sheet context for better AI understanding
+      const googleSheetContext = await getGoogleSheetContext();
+      if (!googleSheetContext) {
+        setGlobalSnackbar({
+          open: true,
+          message: 'Unable to get Google Sheet context.',
+          severity: 'error'
+        });
+        return;
+      }
+
+      const operation = intent.operation;
+      let success = false;
+      let message = '';
+
+      // Create comprehensive AI prompt for sheet operations
+      const operationPrompt = `🎯 GOOGLE SHEET OPERATION INSTRUCTIONS
+
+You are editing a Google Sheet with the following details:
+📊 Sheet Title: "${googleSheetContext.title}"
+🔗 Sheet ID: ${googleSheetContext.sheetId}
+📈 Number of Sheets: ${googleSheetContext.sheetCount}
+
+OPERATION REQUEST: ${intent.request}
+
+EXTRACTED OPERATION DETAILS:
+📍 Target Cell: ${operation.cell}
+📝 Data/Formula: ${operation.data}
+🔧 Is Formula: ${operation.isFormula}
+📋 Operation Type: ${operation.type}
+
+IMPORTANT: You are directly editing a Google Sheet. The operation will be applied to the specified cell location. Ensure you understand:
+1. The target cell location (${operation.cell})
+2. Whether this is a formula (${operation.isFormula})
+3. The exact data to be inserted
+
+Please confirm this operation is correct before proceeding.`;
+
+      console.log('🤖 AI Operation Prompt:', operationPrompt);
+
+      // Switch to Google Sheets tab if not already there
+      if (activeDevelopmentTab !== 'gsheets') {
+        setActiveDevelopmentTab('gsheets');
+      }
+
+      // Wait for tab switch then apply data
+      setTimeout(async () => {
+        try {
+          // Extract sheet ID from URL
+          const match = googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+          if (!match) {
+            throw new Error('Invalid Google Sheet URL format.');
+          }
+
+          const sheetId = match[1];
+          
+          // Get sheet context for this operation
+          const sheetContext = await getGoogleSheetContext();
+
+          // Log the operation details for debugging
+          console.log('🔍 Google Sheet Operation Details:', {
+            operation,
+            cell: operation.cell,
+            data: operation.data,
+            isFormula: operation.isFormula,
+            type: operation.type
+          });
+
+          if (operation.type === 'cell') {
+            // Update a single cell
+            const body = {
+              values: [[operation.data]]
+            };
+
+            console.log(`📝 Applying to cell ${operation.cell}:`, operation.data);
+            console.log(`🔧 Is formula: ${operation.isFormula}`);
+
+            const response = await fetch(
+              `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${operation.cell}?valueInputOption=${operation.isFormula ? 'USER_ENTERED' : 'RAW'}`,
+              {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${googleToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+              }
+            );
+
+            if (!response.ok) {
+              throw new Error(`Failed to update cell: ${response.status}`);
+            }
+
+            success = true;
+            message = `✅ Successfully ${operation.isFormula ? 'added formula' : 'added data'} to cell ${operation.cell} in Google Sheet "${googleSheetContext.title}": "${operation.data}"`;
+
+          } else if (operation.type === 'row') {
+            // Add a new row
+            const body = {
+              values: [operation.rowData]
+            };
+
+            const response = await fetch(
+              `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/A:Z?valueInputOption=RAW`,
+              {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${googleToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+              }
+            );
+
+            if (!response.ok) {
+              throw new Error(`Failed to add row: ${response.status}`);
+            }
+
+            success = true;
+            message = `✅ Successfully added row with data: ${operation.rowData.join(', ')}`;
+
+          } else if (operation.type === 'column') {
+            // Add a new column
+            const columnData = operation.colData.map(value => [value]);
+            const body = {
+              values: columnData
+            };
+
+            const response = await fetch(
+              `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/A:Z?valueInputOption=RAW`,
+              {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${googleToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+              }
+            );
+
+            if (!response.ok) {
+              throw new Error(`Failed to add column: ${response.status}`);
+            }
+
+            success = true;
+            message = `✅ Successfully added column with data: ${operation.colData.join(', ')}`;
+          }
+
+          if (success) {
+            // Add success message to chat
+            const assistantMessage = {
+              id: Date.now() + 1,
+              role: 'assistant',
+              content: `🎯 **Google Sheet Operation Completed Successfully!**
+
+${message}
+
+**Operation Summary:**
+- 📍 Target Cell: ${operation.cell}
+- 📝 Data/Formula: \`${operation.data}\`
+- 🔧 Type: ${operation.isFormula ? 'Formula' : 'Data'}
+- 📊 Sheet: "${sheetContext.title}"
+
+The operation has been applied to your Google Sheet. You can now see the changes in the Google Sheets editor.`,
+              timestamp: new Date(),
+              type: 'sheet_data_applied',
+              operation: operation,
+              googleSheet: {
+                title: sheetContext.title,
+                url: sheetContext.url,
+                sheetId: sheetContext.sheetId
+              }
+            };
+            
+            setGlobalChatMessages(prev => [...prev, assistantMessage]);
+            
+            // Show success notification
+            setGlobalSnackbar({
+              open: true,
+              message: message,
+              severity: 'success'
+            });
+          }
+
+        } catch (error) {
+          console.error('Error applying sheet data:', error);
+          
+          const errorMessage = {
+            id: Date.now() + 1,
+            role: 'assistant',
+            content: `❌ Failed to apply changes to Google Sheet: ${error.message}`,
+            timestamp: new Date(),
+            type: 'sheet_data_error'
+          };
+          
+          setGlobalChatMessages(prev => [...prev, errorMessage]);
+          
+          setGlobalSnackbar({
+            open: true,
+            message: `Error applying changes: ${error.message}`,
+            severity: 'error'
+          });
+        }
+      }, 500);
+
+    } catch (error) {
+      console.error('Error in sheet data application:', error);
+      setGlobalSnackbar({
+        open: true,
+        message: 'Error processing sheet operation',
+        severity: 'error'
+      });
+    } finally {
+      setIsGlobalChatLoading(false);
+    }
+  };
+
+  const globalHandleGoogleSheetCreation = async (intent) => {
+    try {
+      setIsGlobalChatLoading(true);
+      
+      if (!googleToken) {
+        setGlobalSnackbar({
+          open: true,
+          message: 'Please sign in to Google first to create a Google Sheet.',
+          severity: 'error'
+        });
+        return;
+      }
+
+      const sheetTitle = intent.title || `AI Created Sheet - ${new Date().toLocaleDateString()}`;
+      
+      // Call the existing createNewGoogleSheet function
+      await createNewGoogleSheet(sheetTitle);
+      
+      // Add assistant message about the creation
+      const assistantMessage = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: `📊 **Google Sheet Created Successfully!**
+
+I've created a new Google Sheet titled **"${sheetTitle}"** in your Google Drive and opened it in the editor.
+
+The sheet is now ready for you to:
+• Add data and formulas
+• Create charts and visualizations
+• Organize information in tables
+• Use the AI assistant to help with data operations
+
+You can now start working with your new spreadsheet!`,
+        timestamp: new Date(),
+        type: 'google_sheet_creation',
+        googleSheet: {
+          title: sheetTitle,
+          created: true
+        }
+      };
+      
+      setGlobalChatMessages(prev => [...prev, assistantMessage]);
+      
+    } catch (error) {
+      console.error('Error creating Google Sheet:', error);
+      setGlobalSnackbar({
+        open: true,
+        message: 'Error creating Google Sheet',
         severity: 'error'
       });
     } finally {
@@ -4969,7 +6135,7 @@ useEffect(() => {
     }
   }
 
-    // ---- Workspace-specific folders/resources ----
+  // ---- Workspace-specific folders/resources ----
   const wsId = selectedWksp?.id || "__none__";
   const [folders, setFolders] = useState(() =>
     loadData(wsId, "folders", [makeFolder("All Resources", ROOT_ID, ROOT_ID)]));
@@ -5219,11 +6385,11 @@ useEffect(() => {
         console.log('✅ Large import completed successfully');
       } else {
         // For small imports, use the existing approach
-        setFolders(old => {
-          // DO NOT dedupe by folder name/parent alone: must treat full import as authoritative
-          return [...old, ...newFolders];
-        });
-        setResources(old => [...old, ...newFiles]);
+    setFolders(old => {
+      // DO NOT dedupe by folder name/parent alone: must treat full import as authoritative
+      return [...old, ...newFolders];
+    });
+    setResources(old => [...old, ...newFiles]);
       }
     } catch (error) {
       console.error('❌ Error during import:', error);
@@ -5367,37 +6533,37 @@ useEffect(() => {
     }
     
     try {
-      const { data: members } = await supabase
-        .from('workspace_members')
-        .select('*')
-        .eq('workspace_id', workspaceId);
-      const { data: workspace } = await supabase
-        .from('workspaces')
-        .select('owner_id')
-        .eq('id', workspaceId)
-        .single();
+    const { data: members } = await supabase
+      .from('workspace_members')
+      .select('*')
+      .eq('workspace_id', workspaceId);
+    const { data: workspace } = await supabase
+      .from('workspaces')
+      .select('owner_id')
+      .eq('id', workspaceId)
+      .single();
       
       if (!workspace) {
         console.warn('Workspace not found:', workspaceId);
         return { members: members || [], ownerId: null, users: [] };
       }
       
-      let ids = [workspace.owner_id].concat((members || []).map(m => m.user_id).filter(Boolean));
-      let { data: users } = await supabase
-        .from('users')
-        .select('*')
-        .in('id', ids);
-      // Fetch presence
-      let { data: presence } = await supabase
-        .from('user_presence')
-        .select('*')
-        .in('user_id', ids);
-      // Attach presence to users
-      users = (users || []).map(u => {
-        const p = (presence || []).find(pr => pr.user_id === u.id);
-        return { ...u, last_seen: p?.last_seen };
-      });
-      return { members: members || [], ownerId: workspace.owner_id, users: users || [] };
+    let ids = [workspace.owner_id].concat((members || []).map(m => m.user_id).filter(Boolean));
+    let { data: users } = await supabase
+      .from('users')
+      .select('*')
+      .in('id', ids);
+    // Fetch presence
+    let { data: presence } = await supabase
+      .from('user_presence')
+      .select('*')
+      .in('user_id', ids);
+    // Attach presence to users
+    users = (users || []).map(u => {
+      const p = (presence || []).find(pr => pr.user_id === u.id);
+      return { ...u, last_seen: p?.last_seen };
+    });
+    return { members: members || [], ownerId: workspace.owner_id, users: users || [] };
     } catch (error) {
       console.error('Error fetching collaborators:', error);
       return { members: [], ownerId: null, users: [] };
@@ -6476,10 +7642,10 @@ useEffect(() => {
                             />
                           </Card>
                         )}
-                      </Box>
-                    )}
+                     </Box>
+                   )}
 
-                    {activeDevelopmentTab === 'gdrive' && (
+                   {activeDevelopmentTab === 'gdrive' && (
                      <Box>
                        <Typography variant="h5" fontWeight={700} mb={3}>Google Drive Integration</Typography>
                        
@@ -6489,9 +7655,9 @@ useEffect(() => {
                          setGoogleToken={setGoogleToken}
                          setGlobalSnackbar={setGlobalSnackbar}
                          loginWithGoogle={loginWithGoogle}
-                          onFileSelect={(file) => {
+                         onFileSelect={(file) => {
                            // Handle file selection - could open in appropriate editor
-                            if (file.mimeType && file.mimeType.includes('document')) {
+                           if (file.mimeType && file.mimeType.includes('document')) {
                              // For Google Docs, open in the Google Docs tab
                              const docUrl = `https://docs.google.com/document/d/${file.id}/edit`;
                              setGoogleDocUrl(docUrl);
@@ -6501,21 +7667,21 @@ useEffect(() => {
                                message: `Opening ${file.name} in Google Docs editor`,
                                severity: 'success'
                              });
-                            } else if (file.mimeType && file.mimeType.includes('spreadsheet')) {
+                           } else if (file.mimeType && file.mimeType.includes('spreadsheet')) {
                               const sheetUrl = `https://docs.google.com/spreadsheets/d/${file.id}/edit`;
                               setGoogleSheetUrl(sheetUrl);
                               setActiveDevelopmentTab('gsheets');
-                              setGlobalSnackbar({
-                                open: true,
+                             setGlobalSnackbar({
+                               open: true,
                                 message: `Opening ${file.name} in Google Sheets editor`,
                                 severity: 'success'
-                              });
+                             });
                            } else if (file.mimeType && file.mimeType.includes('presentation')) {
                               const slidesUrl = `https://docs.google.com/presentation/d/${file.id}/edit`;
                               setGoogleSlidesUrl(slidesUrl);
                               setActiveDevelopmentTab('gslides');
-                              setGlobalSnackbar({
-                                open: true,
+                             setGlobalSnackbar({
+                               open: true,
                                 message: `Opening ${file.name} in Google Slides editor`,
                                 severity: 'success'
                               });

@@ -7,7 +7,7 @@ require('dotenv').config({ debug: true });
 
 // Initialize Supabase client
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
@@ -107,6 +107,9 @@ app.post('/api/invite', async (req, res) => {
       return res.status(400).json({ error: 'Workspace not found' });
     }
 
+    console.log('About to fetch workspace details...');
+    console.log('Workspace fetch result:', { workspace, workspaceError });
+
     // Check if user is already invited or a member
     const { data: existingMember, error: memberCheckError } = await supabase
       .from('workspace_members')
@@ -115,10 +118,18 @@ app.post('/api/invite', async (req, res) => {
       .eq('user_email', email)
       .single();
 
+    console.log('About to check existing membership...');
+    console.log('Membership check completed:', { existingMember, memberCheckError });
+
     if (existingMember) {
+      console.log('Checking existing member status...');
+      console.log('Existing member found, status:', existingMember.status);
+      
       if (existingMember.status === 'active') {
+        console.log('User is already active/accepted member, returning error...');
         return res.status(400).json({ error: 'User is already a member of this workspace' });
       } else if (existingMember.status === 'pending') {
+        console.log('User is already pending, returning error...');
         return res.status(400).json({ error: 'User has already been invited to this workspace' });
       }
     }
@@ -141,7 +152,7 @@ app.post('/api/invite', async (req, res) => {
 
     console.log('Workspace invitation created in database for:', email);
 
-    // Send email notification
+    // Send email notification directly using Resend API
     const emailSubject = `You've been invited to join "${workspace.name}" workspace!`;
     const emailHtml = `
       <!DOCTYPE html>
@@ -215,52 +226,77 @@ To accept this invitation:
 This invitation was sent from DevHub Workspace
     `;
 
-    // Send email using internal call
-    const emailPostData = JSON.stringify({
-      to: email,
+    // Send email directly using Resend API
+    console.log('About to send email via Resend API...');
+    console.log('Using API key:', process.env.RESEND_API_KEY ? process.env.RESEND_API_KEY.substring(0, 10) + '...' : 'NOT FOUND');
+    
+    // For testing mode, send to your own email instead
+    const isTestingMode = process.env.NODE_ENV === 'development' || process.env.EMAIL_TESTING_MODE === 'true';
+    const actualRecipient = isTestingMode ? 'ramitrgoyal@gmail.com' : email;
+    
+    if (isTestingMode) {
+      console.log('🧪 TESTING MODE: Sending email to your own address:', actualRecipient);
+      console.log('📧 Original recipient was:', email);
+    }
+    
+    const postData = JSON.stringify({
+      from: 'onboarding@resend.dev', // Use the verified domain from your .env
+      to: [actualRecipient],
       subject: emailSubject,
       html: emailHtml,
       text: emailText
     });
 
-    const emailOptions = {
-      hostname: 'localhost',
-      port: 3002,
-      path: '/api/send-email',
+    const options = {
+      hostname: 'api.resend.com',
+      port: 443,
+      path: '/emails',
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
         'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(emailPostData)
+        'Content-Length': Buffer.byteLength(postData)
       }
     };
 
-    const emailRequest = http.request(emailOptions, (emailResponse) => {
-      let emailData = '';
+    const request = https.request(options, (response) => {
+      let data = '';
       
-      emailResponse.on('data', (chunk) => {
-        emailData += chunk;
+      response.on('data', (chunk) => {
+        data += chunk;
       });
       
-      emailResponse.on('end', () => {
-        try {
-          const emailResult = JSON.parse(emailData);
-          if (!emailResult.ok) {
-            console.error('Email sending failed:', emailResult);
-          } else {
-            console.log('Email sent successfully via internal call');
+      response.on('end', () => {
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          console.log('Email sent successfully via Resend:', data);
+        } else {
+          console.error('Resend API error:', response.statusCode, data);
+          
+          // Parse error details for better debugging
+          try {
+            const errorData = JSON.parse(data);
+            if (errorData.error && errorData.error.includes('testing emails')) {
+              console.error('🚨 RESEND TESTING MODE ISSUE:');
+              console.error('Your Resend account is in testing mode.');
+              console.error('You can only send emails to: ramitrgoyal@gmail.com');
+              console.error('To send to other emails, verify a domain at: https://resend.com/domains');
+              console.error('Then change the "from" address to use your verified domain.');
+            }
+          } catch (e) {
+            console.error('Could not parse error response');
           }
-        } catch (e) {
-          console.error('Email response parsing error:', e);
         }
       });
     });
 
-    emailRequest.on('error', (error) => {
-      console.error('Email request error:', error);
+    request.on('error', (error) => {
+      console.error('Email sending error:', error);
     });
 
-    emailRequest.write(emailPostData);
-    emailRequest.end();
+    request.write(postData);
+    request.end();
+
+    console.log('Email request sent to Resend API');
 
     return res.status(200).json({ 
       ok: true, 
