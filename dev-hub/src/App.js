@@ -898,6 +898,41 @@ function makeFolder(name, parent, id = null) {
     droppable: true
   };
 }
+
+// Function to generate unique folder IDs that don't conflict with existing ones
+async function generateUniqueFolderIds(workspaceId, count) {
+  console.log(`🔍 Generating ${count} unique folder IDs for workspace ${workspaceId}`);
+  
+  // Get existing folder IDs from the database
+  const { data: existingFolders, error } = await supabase
+    .from('workspace_folders')
+    .select('id')
+    .eq('workspace_id', workspaceId);
+  
+  if (error) {
+    console.error('❌ Error fetching existing folders:', error);
+    throw error;
+  }
+  
+  const existingIds = new Set(existingFolders?.map(f => f.id) || []);
+  console.log(`📁 Found ${existingIds.size} existing folder IDs:`, Array.from(existingIds).slice(0, 10));
+  
+  // Find the next available ID
+  let nextId = Math.max(1000, ...existingIds) + 1;
+  console.log(`🆔 Starting from ID: ${nextId}`);
+  
+  const ids = [];
+  for (let i = 0; i < count; i++) {
+    // Ensure we don't exceed PostgreSQL INTEGER limits
+    if (nextId > 2147483647) {
+      nextId = 1000; // Reset if we get too high
+    }
+    ids.push(nextId++);
+  }
+  
+  console.log(`✅ Generated ${ids.length} unique folder IDs:`, ids.slice(0, 5));
+  return ids;
+}
 function makeFileNode(res) {
   return {
     id: res.id,
@@ -974,12 +1009,14 @@ function saveData(wsKey, key, data) {
     localStorage.setItem(`${key}-${wsKey}`, JSON.stringify(minimalData));
   } catch (error) {
     if (error.name === "QuotaExceededError") {
-      alert("Storage quota exceeded! Cannot save more data. Consider clearing storage, using fewer/larger folders, or connecting a database. Large imports should use server or IndexedDB.");
-      // Optionally, handle by removing oldest/stale data or skipping storage
+      console.warn("Storage quota exceeded for localStorage. This is expected for large imports - data will be saved to Supabase instead.");
+      // Don't show alert for large imports - they should use Supabase
+      return false; // Indicate failure
     } else {
       throw error;
     }
   }
+  return true; // Indicate success
 }
 function loadData(wsKey, key, defaultValue) {
   const data = localStorage.getItem(`${key}-${wsKey}`);
@@ -1340,7 +1377,7 @@ function WorkspaceShare({ workspaceId, currentUser, onShared, onInviteSuccess, w
 }
 
 // ---- GITHUB IMPORT FEATURE ----
-function ImportGithubIntoApp({ addFoldersAndResources, folderOptions }) {
+function ImportGithubIntoApp({ addFoldersAndResources, folderOptions, workspaceId }) {
   const [repoUrl, setRepoUrl] = useState("");
   const [folder, setFolder] = useState(ROOT_ID);
   const [status, setStatus] = useState("");
@@ -1355,7 +1392,7 @@ function ImportGithubIntoApp({ addFoldersAndResources, folderOptions }) {
         onClick={async () => {
           setStatus("Importing...");
           const { count, error } = await importGithubTreeWithFoldersAccurate(
-            repoUrl, folder, addFoldersAndResources
+            repoUrl, folder, addFoldersAndResources, workspaceId
           );
           setStatus(error ? `Error: ${error}` : `Imported ${count} files!`);
           setRepoUrl("");
@@ -1376,25 +1413,19 @@ function ImportGithubIntoApp({ addFoldersAndResources, folderOptions }) {
  * - No folder or file can ever be "mis-parented" due to naming collision.
  */
 async function importGithubTreeWithFoldersAccurate(
-  githubUrl, targetRootFolderId, addFoldersAndResources
+  githubUrl, targetRootFolderId, addFoldersAndResources, workspaceId
 ) {
   // Parse owner/repo
   const m = githubUrl.match(/github\.com\/([^\/]+)\/([^\/]+)(\/|$)/);
   if (!m) return { error: "Invalid GitHub repo URL" };
   const [_, owner, repo] = m;
+  
+  // Validate workspace ID
+  if (!workspaceId) return { error: "No workspace selected" };
+  
   // Step 1: create top-level folder for repo name
   const repoFolderName = repo;
-  const repoRootId = Date.now() + Math.random();
-  // pathToId maps full relative _folder path_ to a node id. 
-  // "" is the repo root.
-  const pathToId = { "": repoRootId };
-  const folders = [{
-    id: repoRootId,
-    parent: targetRootFolderId,
-    text: repoFolderName,
-    droppable: true
-  }];
-
+  
   // Step 2: Fetch branch/tree
   const repoInfoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`);
   if (!repoInfoRes.ok) return { error: "Repo not found or API error" };
@@ -1405,13 +1436,41 @@ async function importGithubTreeWithFoldersAccurate(
   );
   if (!treeRes.ok) return { error: "GitHub tree fetch error" };
   const tree = await treeRes.json();
+  
+  // Step 3: Check if this repo is already imported
+  const existingFolders = await supabaseWorkspaceStorage.loadFolders(workspaceId);
+  const repoAlreadyExists = existingFolders.some(folder => 
+    folder.text === repoFolderName && folder.parent === targetRootFolderId
+  );
+  
+  if (repoAlreadyExists) {
+    return { error: `Repository "${repoFolderName}" is already imported. Please delete the existing folder first.` };
+  }
+  
+  // Count how many folders we'll need and generate IDs
+  const folderCount = tree.tree.filter(item => item.type === "tree").length + 1; // +1 for root folder
+  
+  // Generate all folder IDs at once
+  const folderIds = await generateUniqueFolderIds(workspaceId, folderCount);
+  let idIndex = 0;
+  
+  const repoRootId = folderIds[idIndex++];
+  // pathToId maps full relative _folder path_ to a node id. 
+  // "" is the repo root.
+  const pathToId = { "": repoRootId };
+  const folders = [{
+    id: repoRootId,
+    parent: targetRootFolderId,
+    text: repoFolderName,
+    droppable: true
+  }];
 
-  // Step 3: Build a nested tree structure from the flat tree
+  // Step 4: Build a nested tree structure from the flat tree
   const folderMap = { "": { id: repoRootId, parent: targetRootFolderId, text: repoFolderName, droppable: true, children: [] } };
   for (const item of tree.tree) {
     if (item.type === "tree") {
       const parentPath = item.path.includes("/") ? item.path.split("/").slice(0, -1).join("/") : "";
-      const thisId = Date.now() + Math.random();
+      const thisId = folderIds[idIndex++];
       folderMap[item.path] = {
         id: thisId,
         parent: pathToId[parentPath] || repoRootId,
@@ -1430,7 +1489,7 @@ async function importGithubTreeWithFoldersAccurate(
     if (item.type === "blob") {
       const parentPath = item.path.includes("/") ? item.path.split("/").slice(0, -1).join("/") : "";
       const fileNode = {
-        id: Date.now() + Math.random(),
+        id: crypto.randomUUID(), // Use UUID for files (workspace_files table uses UUID primary key)
         title: item.path.split("/").pop(),
         platform: "GitHub",
         url: `https://github.com/${owner}/${repo}/blob/${branch}/${item.path}`,
@@ -1444,7 +1503,7 @@ async function importGithubTreeWithFoldersAccurate(
   }
   // Step 5: Flatten folders for the app's tree view
   const allFolders = Object.values(folderMap);
-  addFoldersAndResources(allFolders, files);
+  await addFoldersAndResources(allFolders, files);
   return { count: files.length };
 }
 function isGoogleDocResource(ref) {
@@ -5121,12 +5180,55 @@ useEffect(() => {
   const folderResources = resources
     .filter(r => r.folder === activeFolder)
 
-  function addFoldersAndResources(newFolders, newFiles) {
-    setFolders(old => {
-      // DO NOT dedupe by folder name/parent alone: must treat full import as authoritative
-      return [...old, ...newFolders];
-    });
-    setResources(old => [...old, ...newFiles]);
+  async function addFoldersAndResources(newFolders, newFiles) {
+    if (!selectedWksp?.id) {
+      console.error('No workspace selected for import');
+      return;
+    }
+
+    console.log(`📁 Importing ${newFolders.length} folders and ${newFiles.length} files to workspace ${selectedWksp.id}`);
+
+    try {
+      // For large imports, save directly to Supabase instead of localStorage
+      if (newFiles.length > 100) {
+        console.log('🔄 Large import detected, saving directly to Supabase...');
+        
+        // Save folders first
+        if (newFolders.length > 0) {
+          await supabaseWorkspaceStorage.saveFolders(selectedWksp.id, newFolders);
+          console.log('✅ Folders saved to Supabase');
+        }
+        
+        // Save files in batches to avoid overwhelming the database
+        const batchSize = 50;
+        for (let i = 0; i < newFiles.length; i += batchSize) {
+          const batch = newFiles.slice(i, i + batchSize);
+          await supabaseWorkspaceStorage.saveWorkspaceFiles(selectedWksp.id, batch);
+          console.log(`✅ Saved batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(newFiles.length/batchSize)}`);
+        }
+        
+        // Reload data from Supabase
+        const [loadedFolders, loadedFiles] = await Promise.all([
+          supabaseWorkspaceStorage.loadFolders(selectedWksp.id),
+          supabaseWorkspaceStorage.loadWorkspaceFiles(selectedWksp.id)
+        ]);
+        
+        setFolders(loadedFolders);
+        setResources(loadedFiles);
+        
+        console.log('✅ Large import completed successfully');
+      } else {
+        // For small imports, use the existing approach
+        setFolders(old => {
+          // DO NOT dedupe by folder name/parent alone: must treat full import as authoritative
+          return [...old, ...newFolders];
+        });
+        setResources(old => [...old, ...newFiles]);
+      }
+    } catch (error) {
+      console.error('❌ Error during import:', error);
+      alert('Import failed: ' + error.message);
+    }
   }
 
   async function deleteWorkspace(wkspId) {
@@ -6826,7 +6928,11 @@ useEffect(() => {
                       <Typography variant="h5" fontWeight={700} mb={3}>Import Tools</Typography>
                       <Card sx={{ p: 3, mb: 3 }}>
                         <Typography variant="h6" fontWeight={600} mb={2}>Import GitHub Repository</Typography>
-                        <ImportGithubIntoApp addFoldersAndResources={addFoldersAndResources} folderOptions={folderOptionsFlat(folders, ROOT_ID, 0)} />
+                        <ImportGithubIntoApp 
+                          addFoldersAndResources={addFoldersAndResources} 
+                          folderOptions={folderOptionsFlat(folders, ROOT_ID, 0)}
+                          workspaceId={selectedWksp?.id}
+                        />
                       </Card>
                       
                       <Card sx={{ p: 3 }}>
