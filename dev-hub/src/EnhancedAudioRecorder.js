@@ -1,477 +1,421 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Card, Typography, Button, Box, Stack, IconButton, Slider, 
-  List, ListItem, ListItemText, ListItemAvatar, Avatar, Chip,
-  Dialog, DialogTitle, DialogContent, DialogActions, TextField
+import {
+  Box, Button, IconButton, Typography, LinearProgress,
+  Alert, Chip, Stack, Card, CardContent, Tooltip
 } from '@mui/material';
-import MicIcon from '@mui/icons-material/Mic';
-import StopIcon from '@mui/icons-material/Stop';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import PauseIcon from '@mui/icons-material/Pause';
-import DeleteIcon from '@mui/icons-material/Delete';
-import ReplyIcon from '@mui/icons-material/Reply';
-import WaveformIcon from '@mui/icons-material/GraphicEq';
-import { uploadAudioComment, fetchAudioComments } from './audioCommentsApi';
+import {
+  Mic, Stop, PlayArrow, Pause, Delete, CloudUpload,
+  Download, VolumeUp, Timer, Storage
+} from '@mui/icons-material';
+import storageService from './storage-service.js';
 
-// Simple waveform visualization component
-function WaveformVisualizer({ audioData, isPlaying, currentTime, duration }) {
-  const canvasRef = useRef();
-  
-  useEffect(() => {
-    if (!audioData || !canvasRef.current) return;
-    
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
-    
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
-    
-    // Draw waveform
-    ctx.strokeStyle = '#1976d2';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    
-    const sliceWidth = width / audioData.length;
-    let x = 0;
-    
-    for (let i = 0; i < audioData.length; i++) {
-      const v = audioData[i] / 128.0;
-      const y = (v * height) / 2;
-      
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-      
-      x += sliceWidth;
-    }
-    
-    ctx.stroke();
-    
-    // Draw progress indicator
-    if (isPlaying && duration > 0) {
-      const progressX = (currentTime / duration) * width;
-      ctx.strokeStyle = '#ff4444';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(progressX, 0);
-      ctx.lineTo(progressX, height);
-      ctx.stroke();
-    }
-  }, [audioData, isPlaying, currentTime, duration]);
-  
-  return (
-    <canvas 
-      ref={canvasRef} 
-      width={400} 
-      height={80} 
-      style={{ 
-        border: '1px solid #ddd', 
-        borderRadius: 4, 
-        background: '#f9f9f9',
-        width: '100%',
-        maxWidth: 400
-      }} 
-    />
-  );
-}
-
-// Individual audio comment component
-function AudioComment({ comment, currentUser, onReply, onDelete }) {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const audioRef = useRef();
-  
-  const togglePlay = () => {
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play();
-    }
-    setIsPlaying(!isPlaying);
-  };
-  
-  const handleTimeUpdate = () => {
-    setCurrentTime(audioRef.current.currentTime);
-  };
-  
-  const handleLoadedMetadata = () => {
-    setDuration(audioRef.current.duration);
-  };
-  
-  const handleEnded = () => {
-    setIsPlaying(false);
-    setCurrentTime(0);
-  };
-  
-  const formatTime = (time) => {
-    const minutes = Math.floor(time / 60);
-    const seconds = Math.floor(time % 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
-  
-  return (
-    <Card sx={{ p: 2, mb: 2, bgcolor: '#f8fafc' }}>
-      <Stack direction="row" spacing={2} alignItems="flex-start">
-        <Avatar sx={{ bgcolor: 'primary.main' }}>
-          {comment.user_email?.[0]?.toUpperCase() || '?'}
-        </Avatar>
-        <Box sx={{ flex: 1 }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-            <Typography variant="subtitle2" fontWeight={600}>
-              {comment.user_email}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {new Date(comment.created_at).toLocaleString()}
-            </Typography>
-          </Stack>
-          
-          <Box sx={{ mb: 2 }}>
-            <audio
-              ref={audioRef}
-              src={comment.audio_url}
-              onTimeUpdate={handleTimeUpdate}
-              onLoadedMetadata={handleLoadedMetadata}
-              onEnded={handleEnded}
-              style={{ display: 'none' }}
-            />
-            
-            <Stack direction="row" spacing={1} alignItems="center" mb={1}>
-              <IconButton 
-                onClick={togglePlay} 
-                color="primary"
-                sx={{ bgcolor: 'primary.light', '&:hover': { bgcolor: 'primary.main' } }}
-              >
-                {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
-              </IconButton>
-              
-              <Box sx={{ flex: 1 }}>
-                <Slider
-                  value={currentTime}
-                  max={duration || 100}
-                  onChange={(_, value) => {
-                    audioRef.current.currentTime = value;
-                    setCurrentTime(value);
-                  }}
-                  size="small"
-                />
-              </Box>
-              
-              <Typography variant="caption" color="text.secondary">
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </Typography>
-            </Stack>
-            
-            <WaveformVisualizer 
-              audioData={comment.waveform_data || []} 
-              isPlaying={isPlaying}
-              currentTime={currentTime}
-              duration={duration}
-            />
-          </Box>
-          
-          {comment.transcript && (
-            <Box sx={{ mb: 1, p: 1, bgcolor: '#fff', borderRadius: 1, border: '1px solid #eee' }}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                Transcript:
-              </Typography>
-              <Typography variant="body2">{comment.transcript}</Typography>
-            </Box>
-          )}
-          
-          <Stack direction="row" spacing={1}>
-            <Button 
-              size="small" 
-              startIcon={<ReplyIcon />} 
-              onClick={() => onReply(comment)}
-            >
-              Reply
-            </Button>
-            {currentUser?.id === comment.user_id && (
-              <Button 
-                size="small" 
-                color="error" 
-                startIcon={<DeleteIcon />}
-                onClick={() => onDelete(comment.id)}
-              >
-                Delete
-              </Button>
-            )}
-          </Stack>
-        </Box>
-      </Stack>
-    </Card>
-  );
-}
-
-export default function EnhancedAudioRecorder({ resourceId, currentUser, workspaceId }) {
+export default function EnhancedAudioRecorder({
+  onUpload,
+  resourceId,
+  currentUser,
+  workspaceId = null,
+  showStorageInfo = true
+}) {
   const [recording, setRecording] = useState(false);
   const [audioUrl, setAudioUrl] = useState(null);
   const [audioBlob, setAudioBlob] = useState(null);
   const [mediaRecorder, setMediaRecorder] = useState(null);
   const [error, setError] = useState(null);
-  const [comments, setComments] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [replyDialog, setReplyDialog] = useState(null);
-  const [replyText, setReplyText] = useState('');
-  const [waveformData, setWaveformData] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [storedFiles, setStoredFiles] = useState([]);
+  const [storageInfo, setStorageInfo] = useState(null);
+
   const audioRef = useRef();
-  const analyserRef = useRef();
-  
-  // Load existing comments
+  const recordingTimerRef = useRef();
+  const streamRef = useRef();
+
+  // Load stored audio files for this resource
   useEffect(() => {
     if (resourceId) {
-      loadComments();
+      loadStoredFiles();
     }
   }, [resourceId]);
-  
-  const loadComments = async () => {
+
+  // Load storage information
+  useEffect(() => {
+    if (showStorageInfo) {
+      loadStorageInfo();
+    }
+  }, [showStorageInfo]);
+
+  const loadStoredFiles = async () => {
     try {
-      const data = await fetchAudioComments(resourceId);
-      setComments(data);
-    } catch (err) {
-      console.error('Failed to load comments:', err);
+      const files = await storageService.listFiles(`audio/${resourceId}/`);
+      setStoredFiles(files.files || []);
+    } catch (error) {
+      console.error('Failed to load stored files:', error);
     }
   };
-  
+
+  const loadStorageInfo = async () => {
+    try {
+      // This would show storage usage information
+      setStorageInfo({
+        provider: storageService.config.provider,
+        used: '2.5 GB',
+        total: '10 GB',
+        files: storedFiles.length
+      });
+    } catch (error) {
+      console.error('Failed to load storage info:', error);
+    }
+  };
+
   const startRecording = async () => {
     setError(null);
+    setRecordingTime(0);
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      // Set up audio analysis for waveform
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const analyser = audioContext.createAnalyser();
-      const source = audioContext.createMediaStreamSource(stream);
-      source.connect(analyser);
-      analyser.fftSize = 256;
-      analyserRef.current = analyser;
-      
-      const recorder = new window.MediaRecorder(stream);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100
+        }
+      });
+
+      streamRef.current = stream;
+      const recorder = new window.MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
+
       let chunks = [];
-      
+
       recorder.ondataavailable = (e) => chunks.push(e.data);
+
       recorder.onstop = () => {
         const blob = new Blob(chunks, { type: 'audio/webm' });
         setAudioBlob(blob);
         setAudioUrl(URL.createObjectURL(blob));
-        stream.getTracks().forEach(track => track.stop());
+
+        // Stop all tracks
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
+        }
       };
-      
-      // Start waveform visualization
-      const updateWaveform = () => {
-        if (!analyserRef.current || !recording) return;
-        
-        const bufferLength = analyserRef.current.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-        analyserRef.current.getByteFrequencyData(dataArray);
-        
-        setWaveformData([...dataArray]);
-        requestAnimationFrame(updateWaveform);
-      };
-      
+
       recorder.start();
       setMediaRecorder(recorder);
       setRecording(true);
-      updateWaveform();
-      
+
+      // Start recording timer
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+
     } catch (err) {
-      setError('Microphone access denied or not available.');
+      setError('Microphone access denied or not available. Please check your browser permissions.');
+      console.error('Recording error:', err);
     }
   };
-  
+
   const stopRecording = () => {
-    if (mediaRecorder) {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stop();
       setRecording(false);
+
+      // Clear timer
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
     }
   };
-  
+
   const handleUpload = async () => {
     if (!audioBlob) return;
-    
-    setLoading(true);
+
+    setUploading(true);
+    setUploadProgress(0);
+
     try {
-      await uploadAudioComment(audioBlob, resourceId, currentUser);
+      // Generate file path
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const fileName = `audio_${timestamp}.webm`;
+      const filePath = `audio/${resourceId || 'general'}/${fileName}`;
+
+      // Create file object
+      const file = new File([audioBlob], fileName, { type: 'audio/webm' });
+
+      // Upload to external storage
+      const result = await storageService.uploadFile(file, filePath, {
+        resourceId,
+        workspaceId,
+        userId: currentUser?.id,
+        recordingTime,
+        uploadedAt: new Date().toISOString()
+      });
+
+      // Call the original onUpload callback if provided
+      if (onUpload) {
+        await onUpload(audioBlob, resourceId, currentUser, result);
+      }
+
+      // Clear local state
       setAudioBlob(null);
       setAudioUrl(null);
-      setWaveformData([]);
-      await loadComments();
-    } catch (err) {
-      setError('Failed to upload audio comment: ' + err.message);
+      setRecordingTime(0);
+
+      // Reload stored files
+      await loadStoredFiles();
+
+      // Show success message
+      console.log('Audio uploaded successfully:', result);
+
+    } catch (error) {
+      console.error('Upload failed:', error);
+      setError('Failed to upload audio. Please try again.');
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
     }
-    setLoading(false);
   };
-  
-  const handleReply = (comment) => {
-    setReplyDialog(comment);
+
+  const handlePlayPause = () => {
+    if (audioRef.current) {
+      if (playing) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play();
+      }
+      setPlaying(!playing);
+    }
   };
-  
-  const submitReply = async () => {
-    if (!replyText.trim()) return;
-    
-    // For now, just add as a text comment - could be enhanced to support audio replies
+
+  const handleDelete = () => {
+    setAudioBlob(null);
+    setAudioUrl(null);
+    setRecordingTime(0);
+    setError(null);
+  };
+
+  const downloadStoredFile = async (file) => {
     try {
-      // This would need a separate API for text replies
-      console.log('Reply to comment:', replyDialog.id, 'Text:', replyText);
-      setReplyDialog(null);
-      setReplyText('');
-    } catch (err) {
-      setError('Failed to submit reply: ' + err.message);
+      const result = await storageService.downloadFile(file.path);
+      const url = URL.createObjectURL(result.blob);
+
+      // Create download link
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name || 'audio.webm';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      // Cleanup
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download failed:', error);
+      setError('Failed to download file.');
     }
   };
-  
-  const handleDelete = async (commentId) => {
-    if (!window.confirm('Delete this audio comment?')) return;
-    
+
+  const deleteStoredFile = async (file) => {
     try {
-      // This would need a delete API
-      console.log('Delete comment:', commentId);
-      await loadComments();
-    } catch (err) {
-      setError('Failed to delete comment: ' + err.message);
+      await storageService.deleteFile(file.path);
+      await loadStoredFiles();
+    } catch (error) {
+      console.error('Delete failed:', error);
+      setError('Failed to delete file.');
     }
   };
-  
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatFileSize = (bytes) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
   return (
-    <Card sx={{ p: 3, mt: 2, bgcolor: '#f7fafd', border: '1px solid #e3f2fd' }}>
-      <Typography variant="h6" fontWeight={700} mb={2} color="primary">
-        <WaveformIcon sx={{ mr: 1 }} />
-        Audio Comments
-      </Typography>
-      
+    <Box sx={{ width: '100%', maxWidth: 600 }}>
+      {/* Storage Information */}
+      {showStorageInfo && storageInfo && (
+        <Card sx={{ mb: 2, bgcolor: 'background.paper' }}>
+          <CardContent>
+            <Stack direction="row" spacing={2} alignItems="center">
+              <Storage color="primary" />
+              <Box>
+                <Typography variant="body2" color="text.secondary">
+                  Storage: {storageInfo.provider}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {storageInfo.files} files • {storageInfo.used} / {storageInfo.total}
+                </Typography>
+              </Box>
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Recording Controls */}
-      <Box sx={{ mb: 3, p: 2, bgcolor: '#fff', borderRadius: 2, border: '1px solid #ddd' }}>
-        <Stack direction="row" spacing={2} alignItems="center" mb={2}>
-          {!recording ? (
+      <Card sx={{ mb: 2 }}>
+        <CardContent>
+          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
             <Button
-              variant="contained"
-              color="primary"
-              startIcon={<MicIcon />}
-              onClick={startRecording}
-              size="large"
+              variant={recording ? "contained" : "outlined"}
+              color={recording ? "error" : "primary"}
+              startIcon={recording ? <Stop /> : <Mic />}
+              onClick={recording ? stopRecording : startRecording}
+              disabled={uploading}
+              sx={{ minWidth: 120 }}
             >
-              Record Audio Comment
+              {recording ? 'Stop' : 'Record'}
             </Button>
-          ) : (
-            <Button
-              variant="contained"
-              color="error"
-              startIcon={<StopIcon />}
-              onClick={stopRecording}
-              size="large"
-            >
-              Stop Recording
-            </Button>
-          )}
-          
+
+            {recordingTime > 0 && (
+              <Chip
+                icon={<Timer />}
+                label={formatTime(recordingTime)}
+                color="primary"
+                variant="outlined"
+              />
+            )}
+          </Stack>
+
+          {/* Recording Progress */}
           {recording && (
-            <Chip 
-              label="Recording..." 
-              color="error" 
-              variant="outlined"
-              sx={{ animation: 'pulse 1.5s infinite' }}
-            />
+            <Box sx={{ mb: 2 }}>
+              <LinearProgress
+                variant="indeterminate"
+                color="error"
+                sx={{ height: 4, borderRadius: 2 }}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                Recording... {formatTime(recordingTime)}
+              </Typography>
+            </Box>
           )}
-        </Stack>
-        
-        {/* Live waveform during recording */}
-        {recording && waveformData.length > 0 && (
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="caption" color="text.secondary" mb={1} display="block">
-              Live Audio Visualization:
-            </Typography>
-            <WaveformVisualizer 
-              audioData={waveformData} 
-              isPlaying={recording}
-              currentTime={0}
-              duration={0}
-            />
-          </Box>
-        )}
-        
-        {/* Preview recorded audio */}
-        {audioUrl && (
-          <Box sx={{ mt: 2, p: 2, bgcolor: '#f9f9f9', borderRadius: 1 }}>
-            <Typography variant="subtitle2" mb={1}>Preview:</Typography>
-            <audio ref={audioRef} src={audioUrl} controls style={{ width: '100%', marginBottom: 8 }} />
-            <Stack direction="row" spacing={1}>
+
+          {/* Audio Preview */}
+          {audioUrl && (
+            <Box sx={{ mb: 2 }}>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                <IconButton onClick={handlePlayPause} color="primary">
+                  {playing ? <Pause /> : <PlayArrow />}
+                </IconButton>
+                <Typography variant="body2">
+                  Preview ({formatFileSize(audioBlob?.size || 0)})
+                </Typography>
+                <IconButton onClick={handleDelete} color="error" size="small">
+                  <Delete />
+                </IconButton>
+              </Stack>
+
+              <audio
+                ref={audioRef}
+                src={audioUrl}
+                onEnded={() => setPlaying(false)}
+                style={{ width: '100%' }}
+              />
+
               <Button
                 variant="contained"
-                color="success"
+                startIcon={<CloudUpload />}
                 onClick={handleUpload}
-                disabled={loading}
+                disabled={uploading}
+                fullWidth
+                sx={{ mt: 1 }}
               >
-                {loading ? 'Uploading...' : 'Post Comment'}
+                {uploading ? 'Uploading...' : 'Upload to Cloud Storage'}
               </Button>
-              <Button
-                variant="outlined"
-                onClick={() => {
-                  setAudioUrl(null);
-                  setAudioBlob(null);
-                  setWaveformData([]);
-                }}
-              >
-                Discard
-              </Button>
+
+              {uploading && (
+                <Box sx={{ mt: 1 }}>
+                  <LinearProgress
+                    variant="determinate"
+                    value={uploadProgress}
+                    sx={{ height: 4, borderRadius: 2 }}
+                  />
+                </Box>
+              )}
+            </Box>
+          )}
+
+          {/* Error Display */}
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {error}
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Stored Files */}
+      {storedFiles.length > 0 && (
+        <Card>
+          <CardContent>
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Stored Audio Files
+            </Typography>
+
+            <Stack spacing={1}>
+              {storedFiles.map((file, index) => (
+                <Box
+                  key={index}
+                  sx={{
+                    p: 2,
+                    border: 1,
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}
+                >
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <VolumeUp color="primary" />
+                    <Box>
+                      <Typography variant="body2">
+                        {file.name || 'Audio File'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {formatFileSize(file.size || 0)} • {file.metadata?.uploadedAt ?
+                          new Date(file.metadata.uploadedAt).toLocaleDateString() : 'Unknown date'}
+                      </Typography>
+                    </Box>
+                  </Stack>
+
+                  <Stack direction="row" spacing={1}>
+                    <Tooltip title="Download">
+                      <IconButton
+                        size="small"
+                        onClick={() => downloadStoredFile(file)}
+                        color="primary"
+                      >
+                        <Download />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Delete">
+                      <IconButton
+                        size="small"
+                        onClick={() => deleteStoredFile(file)}
+                        color="error"
+                      >
+                        <Delete />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                </Box>
+              ))}
             </Stack>
-          </Box>
-        )}
-        
-        {error && (
-          <Typography color="error" variant="body2" sx={{ mt: 1 }}>
-            {error}
-          </Typography>
-        )}
-      </Box>
-      
-      {/* Comments List */}
-      <Box>
-        <Typography variant="subtitle1" fontWeight={600} mb={2}>
-          Comments ({comments.length})
-        </Typography>
-        
-        {comments.length === 0 ? (
-          <Typography color="text.secondary" fontStyle="italic">
-            No audio comments yet. Be the first to leave one!
-          </Typography>
-        ) : (
-          comments.map(comment => (
-            <AudioComment
-              key={comment.id}
-              comment={comment}
-              currentUser={currentUser}
-              onReply={handleReply}
-              onDelete={handleDelete}
-            />
-          ))
-        )}
-      </Box>
-      
-      {/* Reply Dialog */}
-      <Dialog open={!!replyDialog} onClose={() => setReplyDialog(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>Reply to Audio Comment</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Your reply"
-            multiline
-            rows={3}
-            fullWidth
-            value={replyText}
-            onChange={(e) => setReplyText(e.target.value)}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setReplyDialog(null)}>Cancel</Button>
-          <Button onClick={submitReply} variant="contained">Reply</Button>
-        </DialogActions>
-      </Dialog>
-    </Card>
+          </CardContent>
+        </Card>
+      )}
+    </Box>
   );
 }

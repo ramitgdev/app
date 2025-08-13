@@ -31,6 +31,7 @@ import ChatIcon from '@mui/icons-material/Chat';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
 import PersonIcon from '@mui/icons-material/Person';
+import StorageIcon from '@mui/icons-material/Storage';
 import './AppModern.css';
 import MonacoEditor from '@monaco-editor/react';
 import { TreeView, TreeItem } from '@mui/lab';
@@ -87,9 +88,28 @@ import { llmIntegration } from './llm-integration';
 import WebIDE from './WebIDE';
 import EnhancedWebIDE from './EnhancedWebIDE';
 
+// Import workspace file operations
+import { 
+  loadWorkspaceData, 
+  createWorkspaceFile, 
+  updateWorkspaceFile, 
+  deleteWorkspaceFile,
+  convertDatabaseFileToLocal 
+} from './workspace-file-operations';
 
+// Import Supabase client
+import { supabase } from './supabaseClient';
+import supabaseWorkspaceStorage from './supabase-workspace-storage';
+// import supabaseFileStorage from './supabase-file-storage'; // Not used in this file
 
 import EnhancedAIAssistant from './EnhancedAIAssistant';
+import StorageTest from './StorageTest';
+import EnvTest from './env-test';
+import SupabaseFileMigration from './SupabaseFileMigration';
+
+// Make supabase available globally for debugging
+window.supabase = supabase;
+window.supabaseWorkspaceStorage = supabaseWorkspaceStorage;
 
 // Use the modern theme
 const theme = modernTheme;
@@ -778,9 +798,6 @@ const loginWithGoogle = useGoogleLogin({
 });*/
 
 // ---- Supabase initialization ----
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://itxnrnohdagesykzalzl.supabase.co';
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0eG5ybm9oZGFnZXN5a3phbHpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI5NzE1MTgsImV4cCI6MjA2ODU0NzUxOH0.5tmd_k9Fn0qscrSpZL0bLjs_dT_IsfBlN-iT5D_noyg';
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const ROOT_ID = 0;
 function ChatWindow({workspaceId, currentUserId, collaborators}) {
@@ -2717,6 +2734,7 @@ export default function App() {
   const [sidebarApp, setSidebarApp] = useState(null);
   // Enhanced AI Assistant state
   const [showEnhancedAI, setShowEnhancedAI] = useState(false);
+  const [showStorageTest, setShowStorageTest] = useState(false);
 
   // New AI features state
   const [showAdvancedAI, setShowAdvancedAI] = useState(false);
@@ -4889,18 +4907,45 @@ useEffect(() => {
     }
   }
 
-  // ---- Workspace-specific folders/resources ----
+    // ---- Workspace-specific folders/resources ----
   const wsId = selectedWksp?.id || "__none__";
   const [folders, setFolders] = useState(() =>
     loadData(wsId, "folders", [makeFolder("All Resources", ROOT_ID, ROOT_ID)]));
   const [resources, setResources] = useState(() => loadData(wsId, "resources", []));
+  
+  // Load and save data using localStorage (primary storage)
   useEffect(() => {
     setFolders(loadData(wsId, "folders", [makeFolder("All Resources", ROOT_ID, ROOT_ID)]));
     setResources(loadData(wsId, "resources", []));
     // eslint-disable-next-line
   }, [wsId]);
+  
   useEffect(() => { saveData(wsId, "folders", folders); }, [folders, wsId]);
   useEffect(() => { saveData(wsId, "resources", resources); }, [resources, wsId]);
+
+  // Background Supabase sync (secondary storage for sharing)
+  useEffect(() => {
+    async function syncToSupabase() {
+      if (!selectedWksp?.id) return;
+      
+      try {
+        // Sync folders and resources to Supabase in the background
+        await Promise.all([
+          supabaseWorkspaceStorage.saveFolders(selectedWksp.id, folders),
+          supabaseWorkspaceStorage.saveWorkspaceFiles(selectedWksp.id, resources)
+        ]);
+        console.log('Background sync to Supabase completed');
+      } catch (error) {
+        console.error('Background Supabase sync failed:', error);
+        // Don't show error to user - this is just for sharing
+      }
+    }
+    
+    // Only sync if we have data and workspace is selected
+    if (selectedWksp?.id && (folders.length > 1 || resources.length > 0)) {
+      syncToSupabase();
+    }
+  }, [folders, resources, selectedWksp?.id]);
 
 
   // --- Other UI states ---
@@ -5199,31 +5244,47 @@ useEffect(() => {
 
   // --- Fetch presence for collaborators ---
   async function fetchCollaboratorsWithPresence(workspaceId) {
-    const { data: members } = await supabase
-      .from('workspace_members')
-      .select('*')
-      .eq('workspace_id', workspaceId);
-    const { data: workspace } = await supabase
-      .from('workspaces')
-      .select('owner_id')
-      .eq('id', workspaceId)
-      .single();
-    let ids = [workspace.owner_id].concat((members || []).map(m => m.user_id).filter(Boolean));
-    let { data: users } = await supabase
-      .from('users')
-      .select('*')
-      .in('id', ids);
-    // Fetch presence
-    let { data: presence } = await supabase
-      .from('user_presence')
-      .select('*')
-      .in('user_id', ids);
-    // Attach presence to users
-    users = (users || []).map(u => {
-      const p = (presence || []).find(pr => pr.user_id === u.id);
-      return { ...u, last_seen: p?.last_seen };
-    });
-    return { members: members || [], ownerId: workspace.owner_id, users: users || [] };
+    if (!workspaceId) {
+      console.warn('fetchCollaboratorsWithPresence called with null workspaceId');
+      return { members: [], ownerId: null, users: [] };
+    }
+    
+    try {
+      const { data: members } = await supabase
+        .from('workspace_members')
+        .select('*')
+        .eq('workspace_id', workspaceId);
+      const { data: workspace } = await supabase
+        .from('workspaces')
+        .select('owner_id')
+        .eq('id', workspaceId)
+        .single();
+      
+      if (!workspace) {
+        console.warn('Workspace not found:', workspaceId);
+        return { members: members || [], ownerId: null, users: [] };
+      }
+      
+      let ids = [workspace.owner_id].concat((members || []).map(m => m.user_id).filter(Boolean));
+      let { data: users } = await supabase
+        .from('users')
+        .select('*')
+        .in('id', ids);
+      // Fetch presence
+      let { data: presence } = await supabase
+        .from('user_presence')
+        .select('*')
+        .in('user_id', ids);
+      // Attach presence to users
+      users = (users || []).map(u => {
+        const p = (presence || []).find(pr => pr.user_id === u.id);
+        return { ...u, last_seen: p?.last_seen };
+      });
+      return { members: members || [], ownerId: workspace.owner_id, users: users || [] };
+    } catch (error) {
+      console.error('Error fetching collaborators:', error);
+      return { members: [], ownerId: null, users: [] };
+    }
   }
 
   // --- Recursive tree rendering for folders and files ---
@@ -5426,7 +5487,26 @@ useEffect(() => {
                 <ListItem key={wksp.id} sx={{ mb: 1, borderRadius: 2, boxShadow: 1, bgcolor: '#f8fafc' }}
                   secondaryAction={
                     <Stack direction="row" spacing={1}>
-                      <Tooltip title="Open"><IconButton color="primary" onClick={() => setSelectedWksp(wksp)}><FolderIcon /></IconButton></Tooltip>
+                      <Tooltip title="Open"><IconButton color="primary" onClick={async () => {
+                        setSelectedWksp(wksp);
+                        
+                        // Try to load shared files from Supabase (for collaboration)
+                        try {
+                          const [sharedFolders, sharedResources] = await Promise.all([
+                            supabaseWorkspaceStorage.loadFolders(wksp.id),
+                            supabaseWorkspaceStorage.loadWorkspaceFiles(wksp.id)
+                          ]);
+                          
+                          // If we found shared data, use it instead of localStorage
+                          if (sharedFolders.length > 1 || sharedResources.length > 0) {
+                            console.log('Found shared data in Supabase, using it');
+                            setFolders(sharedFolders);
+                            setResources(sharedResources);
+                          }
+                        } catch (error) {
+                          console.log('No shared data found, using localStorage');
+                        }
+                      }}><FolderIcon /></IconButton></Tooltip>
                       <Tooltip title="Share"><IconButton color="info" onClick={() => setShowShare(wksp.id)}><ShareIcon /></IconButton></Tooltip>
                       <Tooltip title="Delete"><IconButton sx={{ color: 'error.main' }} onClick={async () => { await deleteWorkspace(wksp.id); setSelectedWksp(null); fetchWorkspaces(); }}><DeleteIcon /></IconButton></Tooltip>
                     </Stack>
@@ -5499,6 +5579,7 @@ useEffect(() => {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <>
+
         <AppBar position="static" color="default" elevation={0} sx={{ borderBottom: '1px solid #e0e0e0' }}>
         <Toolbar>
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
@@ -5747,6 +5828,41 @@ useEffect(() => {
                     >
                       🚀 Enhanced AI Assistant
                     </Button>
+
+                    {/* Storage Test Button */}
+                    <Button
+                      variant="outlined"
+                      startIcon={<StorageIcon />}
+                      onClick={() => setShowStorageTest(true)}
+                      sx={{
+                        borderColor: 'success.main',
+                        color: 'success.main',
+                        '&:hover': { 
+                          borderColor: 'success.dark',
+                          bgcolor: 'success.light',
+                          color: 'success.dark'
+                        },
+                        mb: 2
+                      }}
+                    >
+                      🗄️ Test Storage Integration
+                    </Button>
+
+                                         {/* File Migration Button */}
+                     <SupabaseFileMigration 
+                       open={false}
+                       onClose={() => {}}
+                       workspaceId={selectedWksp.id}
+                       localResources={resources}
+                       onMigrationComplete={(result) => {
+                         console.log('Migration completed:', result);
+                         setGlobalSnackbar({
+                           open: true,
+                           message: `Migration completed: ${result.success} files migrated`,
+                           severity: 'success'
+                         });
+                       }}
+                     />
                     
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                       Create files, generate projects, and manage your workspace with AI
@@ -6469,20 +6585,8 @@ useEffect(() => {
                                 type: 'file'
                               };
 
-                              // Add to resources - first check if it exists, if not create it
-                              try {
-                                if (selectedWksp && selectedWksp.resources) {
-                                  // If workspace has resources array, add to it
-                                  selectedWksp.resources = [...(selectedWksp.resources || []), newFile];
-                                } else {
-                                  // Fallback: try to use setResources if it exists
-                                  if (typeof setResources === 'function') {
-                                    setResources(prev => [...(prev || []), newFile]);
-                                  }
-                                }
-                              } catch (error) {
-                                console.log('File created but may not appear in File Explorer yet:', error);
-                              }
+                              // Add to resources state (this will trigger localStorage save)
+                              setResources(prev => [...prev, newFile]);
 
                               // If requested, open the new file in the IDE
                               if (fileData.openInIDE) {
@@ -6814,6 +6918,35 @@ useEffect(() => {
           setActiveFolder={setActiveFolder}
           setResources={setResources}
         />
+      )}
+
+      {/* Storage Test Dialog */}
+      {showStorageTest && (
+        <Dialog 
+          open={showStorageTest} 
+          onClose={() => setShowStorageTest(false)} 
+          maxWidth="md" 
+          fullWidth
+          PaperProps={{
+            sx: {
+              height: '80vh',
+              maxHeight: '80vh'
+            }
+          }}
+        >
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <StorageIcon color="success" />
+            <Typography variant="h6">Storage Integration Test</Typography>
+          </Box>
+            <IconButton onClick={() => setShowStorageTest(false)}>
+              <CloseIcon />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent sx={{ p: 0, height: '100%', overflow: 'auto' }}>
+            <StorageTest />
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Legacy Sidebar Application Interface */}
