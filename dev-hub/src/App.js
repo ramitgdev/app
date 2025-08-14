@@ -87,6 +87,7 @@ import { llmIntegration } from './llm-integration';
 
 import WebIDE from './WebIDE';
 import EnhancedWebIDE from './EnhancedWebIDE';
+import EnhancedChatSystem from './EnhancedChatSystem';
 
 // Import workspace file operations
 import { 
@@ -1267,92 +1268,7 @@ const loginWithGoogle = useGoogleLogin({
 // ---- Supabase initialization ----
 
 const ROOT_ID = 0;
-function ChatWindow({workspaceId, currentUserId, collaborators}) {
-  const [recipient, setRecipient] = useState(null);
-  const [input, setInput] = useState("");
-  const [messages, setMessages] = useState([]);
-  const acceptedCollaborators = collaborators.filter(c => c.user_id && c.user_id !== currentUserId);
 
-  useEffect(()=>{
-    if (recipient && workspaceId) {
-      fetchWorkspaceChats(workspaceId, currentUserId, recipient.user_id).then(setMessages);
-      const t = setInterval(()=>fetchWorkspaceChats(workspaceId, currentUserId, recipient.user_id).then(setMessages), 2000);
-      return ()=>clearInterval(t);
-    }
-  }, [workspaceId, recipient, currentUserId]);
-
-  const hasCollaborators = acceptedCollaborators.length > 0;
-
-  return (
-    <Card className="mui-card" sx={{ p: 2, maxWidth: 420 }}>
-      <Typography fontWeight={700} mb={1}>Chat with Collaborator</Typography>
-      <TextField
-        select
-        label="Select collaborator"
-        value={recipient?.user_id || ""}
-        onChange={e => setRecipient(acceptedCollaborators.find(c => c.user_id === e.target.value))}
-        fullWidth
-        size="small"
-        sx={{ mb: 2 }}
-      >
-        <MenuItem value="" disabled>Select collaborator…</MenuItem>
-        {acceptedCollaborators.map(c => (
-          <MenuItem key={c.user_email} value={c.user_id}>
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <Avatar sx={{ width: 24, height: 24, bgcolor: 'success.main' }}>{c.user_email?.[0]?.toUpperCase() || '?'}</Avatar>
-              <span>{c.user_email}</span>
-            </Stack>
-          </MenuItem>
-        ))}
-      </TextField>
-      {!hasCollaborators && <Typography color="text.secondary">No collaborators yet. Invite and accept to start chatting.</Typography>}
-      <Box sx={{ maxHeight: 180, overflowY: 'auto', background: '#f9f9fb', mb: 2, p: 1, borderRadius: 2, border: '1px solid #dde' }}>
-        <List dense>
-          {messages.map(msg => (
-            <ListItem key={msg.id} alignItems="flex-start" sx={{ flexDirection: msg.sender_id === currentUserId ? 'row-reverse' : 'row' }}>
-              <ListItemAvatar>
-                <Avatar sx={{ bgcolor: msg.sender_id === currentUserId ? 'primary.main' : 'secondary.main' }}>
-                  {msg.sender_id === currentUserId ? 'Me' : 'Them'}
-                </Avatar>
-              </ListItemAvatar>
-              <ListItemText
-                primary={<span style={{ color: msg.sender_id === currentUserId ? '#1976d2' : '#c586ec', fontWeight: 600 }}>{msg.message}</span>}
-                secondary={<span style={{ fontSize: '0.83em', color: '#888' }}>{msg.created_at && msg.created_at.substr(11,5)}</span>}
-                sx={{ textAlign: msg.sender_id === currentUserId ? 'right' : 'left' }}
-              />
-            </ListItem>
-          ))}
-          {messages.length === 0 && <ListItem><ListItemText primary={<Typography color="text.secondary">No messages yet.</Typography>} /></ListItem>}
-        </List>
-      </Box>
-      <Stack direction="row" spacing={1}>
-        <TextField
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          placeholder="Type message"
-          size="small"
-          fullWidth
-          disabled={!recipient || !recipient.user_id}
-        />
-        <Button
-          variant="contained"
-          color="primary"
-          disabled={!input || !recipient || !recipient.user_id}
-          onClick={async ()=>{
-            await sendWorkspaceChat(workspaceId, currentUserId, recipient.user_id, input);
-            setInput("");
-            setMessages(await fetchWorkspaceChats(workspaceId, currentUserId, recipient.user_id));
-            // Placeholder: send email if recipient is not online
-            const isOnline = false; // TODO: Replace with real online check
-            if (!isOnline) {
-              await sendEmailNotification(recipient.user_email, "New message in workspace chat", `You have a new message from a collaborator.`);
-            }
-          }}
-        >Send</Button>
-      </Stack>
-    </Card>
-  );
-}
 
 // Counter for generating unique folder IDs
 let folderIdCounter = 1000;
@@ -7076,13 +6992,13 @@ useEffect(() => {
 
                 {/* Chat Section */}
                 <CollapsibleSection
-                  title="Chat"
+                  title="Team Chat"
                   expanded={expandedSections.chat}
                   onToggle={() => setExpandedSections(prev => ({ ...prev, chat: !prev.chat }))}
-                  icon={<SendIcon color="info" />}
+                  icon={<ChatIcon color="info" />}
                   color="info"
                 >
-                  <ChatWindow
+                  <EnhancedChatSystem
                     workspaceId={selectedWksp.id}
                     currentUserId={user.id}
                     collaborators={collaborators.members.filter(m=>m.user_id)}
