@@ -84,6 +84,7 @@ import GoogleDriveInterface from './GoogleDriveInterface';
 import GoogleDrivePicker from './GoogleDrivePicker';
 
 import { llmIntegration } from './llm-integration';
+import './test-claude-integration';
 
 import WebIDE from './WebIDE';
 import EnhancedWebIDE from './EnhancedWebIDE';

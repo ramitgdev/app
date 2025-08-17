@@ -1,15 +1,13 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const fetch = require('node-fetch');
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = 3003; // Use a different port to avoid conflicts
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'build')));
 
 // Claude API Proxy
 app.post('/api/claude', async (req, res) => {
@@ -19,6 +17,8 @@ app.post('/api/claude', async (req, res) => {
     if (!apiKey) {
       return res.status(400).json({ error: 'API key is required' });
     }
+
+    console.log('Claude API request:', { prompt: prompt.substring(0, 100) + '...', model, maxTokens });
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -44,6 +44,7 @@ app.post('/api/claude', async (req, res) => {
     }
 
     const data = await response.json();
+    console.log('Claude API success:', data.content[0]?.text?.substring(0, 100) + '...');
     res.json({ response: data.content[0]?.text || 'No response from Claude' });
   } catch (error) {
     console.error('Claude proxy error:', error);
@@ -59,6 +60,8 @@ app.post('/api/openai', async (req, res) => {
     if (!apiKey) {
       return res.status(400).json({ error: 'API key is required' });
     }
+
+    console.log('OpenAI API request:', { prompt: prompt.substring(0, 100) + '...', model, maxTokens });
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -84,6 +87,7 @@ app.post('/api/openai', async (req, res) => {
     }
 
     const data = await response.json();
+    console.log('OpenAI API success:', data.choices[0]?.message?.content?.substring(0, 100) + '...');
     res.json({ response: data.choices[0]?.message?.content || 'No response from OpenAI' });
   } catch (error) {
     console.error('OpenAI proxy error:', error);
@@ -99,6 +103,8 @@ app.post('/api/groq', async (req, res) => {
     if (!apiKey) {
       return res.status(400).json({ error: 'API key is required' });
     }
+
+    console.log('Groq API request:', { prompt: prompt.substring(0, 100) + '...', model, maxTokens });
 
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -124,6 +130,7 @@ app.post('/api/groq', async (req, res) => {
     }
 
     const data = await response.json();
+    console.log('Groq API success:', data.choices[0]?.message?.content?.substring(0, 100) + '...');
     res.json({ response: data.choices[0]?.message?.content || 'No response from Groq' });
   } catch (error) {
     console.error('Groq proxy error:', error);
@@ -131,15 +138,16 @@ app.post('/api/groq', async (req, res) => {
   }
 });
 
-// Serve React app
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'build', 'index.html'));
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', message: 'AI Proxy Server is running' });
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 AI Proxy Server running on port ${PORT}`);
   console.log(`📡 API Proxies available:`);
-  console.log(`   - POST /api/claude`);
-  console.log(`   - POST /api/openai`);
-  console.log(`   - POST /api/groq`);
-}); 
+  console.log(`   - POST http://localhost:${PORT}/api/claude`);
+  console.log(`   - POST http://localhost:${PORT}/api/openai`);
+  console.log(`   - POST http://localhost:${PORT}/api/groq`);
+  console.log(`   - GET  http://localhost:${PORT}/health`);
+});

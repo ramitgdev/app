@@ -10,6 +10,8 @@ import {
 import { llmIntegration } from './llm-integration';
 import { testGroqAPI } from './test-groq';
 import MonacoEditor from '@monaco-editor/react';
+import { RealAICopilotIntegration } from './RealAICopilotIntegration';
+import './test-claude-integration';
 
 // Icons
 import SmartToyIcon from '@mui/icons-material/SmartToy';
@@ -34,7 +36,7 @@ import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import SpeedIcon from '@mui/icons-material/Speed';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
-import GitHubIcon from '@mui/icons-material/GitHub';
+import GitHubIcon from '@mui/icons-material/Code';
 import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
 import NoteAddIcon from '@mui/icons-material/NoteAdd';
 
@@ -137,6 +139,9 @@ console.log("\\n🎉 Code execution completed!");`;
   const [originalContent, setOriginalContent] = useState('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isPushingToGitHub, setIsPushingToGitHub] = useState(false);
+  
+  // Copilot integration state
+  const [copilotEnabled, setCopilotEnabled] = useState(true);
   
   // New file dialog state
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
@@ -2348,17 +2353,25 @@ ${code}
               </Select>
             </FormControl>
             
-            <Tooltip title="Ask AI about your code">
+            <Tooltip title="🤖 AI Assistant - Generate code, explain, refactor (Ctrl+Shift+A)">
               <Button
-                variant="outlined"
+                variant="contained"
                 startIcon={<SmartToyIcon />}
                 onClick={() => {
-                  setAiChatOpen(true);
-                  setChatInput("Help me understand this code");
+                  // Trigger the AI panel in the RealAICopilotIntegration
+                  const event = new CustomEvent('openAIPanel');
+                  window.dispatchEvent(event);
                 }}
                 size="small"
+                sx={{
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)'
+                  }
+                }}
               >
-                Ask AI
+                🤖 AI Assistant
               </Button>
             </Tooltip>
 
@@ -2380,6 +2393,18 @@ ${code}
                 color={isFullscreen ? 'primary' : 'default'}
               >
                 {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+              </IconButton>
+            </Tooltip>
+
+            <Tooltip title={`${copilotEnabled ? 'Disable' : 'Enable'} GitHub Copilot`}>
+              <IconButton
+                onClick={() => setCopilotEnabled(!copilotEnabled)}
+                sx={{ 
+                  color: copilotEnabled ? 'success.main' : 'grey.500',
+                  '&:hover': { color: copilotEnabled ? 'success.dark' : 'grey.700' }
+                }}
+              >
+                <GitHubIcon />
               </IconButton>
             </Tooltip>
             
@@ -2491,7 +2516,7 @@ ${code}
         }
       }}>
         {/* Code Editor */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100%', position: 'relative' }}>
           <Box sx={{ minHeight: '400px', flexShrink: 0 }}>
             <MonacoEditor
               height="400px"
@@ -2531,6 +2556,19 @@ ${code}
                   verticalScrollbarSize: 10,
                   horizontalScrollbarSize: 10
                 }
+              }}
+            />
+            
+            {/* Real AI Copilot Integration - Always Enabled for Cursor-like Experience */}
+            <RealAICopilotIntegration
+              editorRef={editorRef}
+              code={code}
+              language={language}
+              onCodeChange={setCode}
+              context={{
+                filePath: fileName,
+                projectType: 'web-development',
+                framework: language === 'javascript' ? 'react' : language === 'typescript' ? 'react-ts' : 'general'
               }}
             />
           </Box>

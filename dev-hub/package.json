@@ -28,7 +28,7 @@
     "gapi-script": "^1.2.0",
     "google-drive-picker": "^1.1.29",
     "lucide-react": "^0.294.0",
-    "node-fetch": "^3.3.2",
+    "node-fetch": "^2.7.0",
     "openai": "^4.28.0",
     "react": "^18.2.0",
     "react-beautiful-dnd": "^13.1.1",
