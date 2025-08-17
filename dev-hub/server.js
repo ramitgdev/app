@@ -1,10 +1,10 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const fetch = require('node-fetch');
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
 
 // Middleware
 app.use(cors());
@@ -94,11 +94,27 @@ app.post('/api/openai', async (req, res) => {
 // Groq API Proxy
 app.post('/api/groq', async (req, res) => {
   try {
-    const { prompt, apiKey, model, maxTokens } = req.body;
+    const { prompt, apiKey, model, maxTokens, systemPrompt, temperature } = req.body;
+    
+    console.log('Groq API request received:');
+    console.log('System Prompt:', systemPrompt);
+    console.log('User Prompt:', prompt);
+    console.log('Model:', model);
+    console.log('Max Tokens:', maxTokens);
+    console.log('Temperature:', temperature);
     
     if (!apiKey) {
       return res.status(400).json({ error: 'API key is required' });
     }
+
+    // Build messages array with system prompt if provided
+    const messages = [];
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt });
+    }
+    messages.push({ role: 'user', content: prompt });
+
+    console.log('Messages being sent to Groq:', messages);
 
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -108,9 +124,9 @@ app.post('/api/groq', async (req, res) => {
       },
       body: JSON.stringify({
         model: model || 'llama3-8b-8192',
-        messages: [{ role: 'user', content: prompt }],
+        messages: messages,
         max_tokens: maxTokens || 1000,
-        temperature: 0.3
+        temperature: temperature || 0.3
       })
     });
 
@@ -124,6 +140,7 @@ app.post('/api/groq', async (req, res) => {
     }
 
     const data = await response.json();
+    console.log('Groq API response:', data.choices[0]?.message?.content);
     res.json({ response: data.choices[0]?.message?.content || 'No response from Groq' });
   } catch (error) {
     console.error('Groq proxy error:', error);
@@ -131,10 +148,12 @@ app.post('/api/groq', async (req, res) => {
   }
 });
 
-// Serve React app
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'build', 'index.html'));
-});
+// Serve React app - only in production
+if (process.env.NODE_ENV === 'production') {
+  app.get('/*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'build', 'index.html'));
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);

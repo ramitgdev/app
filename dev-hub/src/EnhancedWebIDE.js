@@ -251,7 +251,6 @@ I'm your AI coding assistant, here to help you:
       setOriginalContent('');
       setCode(defaultCode);
       setFileName('untitled.js');
-      setLanguage('javascript');
       setHasUnsavedChanges(false);
       
       // Default welcome message
@@ -287,6 +286,57 @@ I'm your AI coding assistant, here to help you:
       }]);
     }
   }, [selectedFile]);
+
+  // Add event listener for setIdeCode from Global AI Assistant
+  useEffect(() => {
+    const handleSetIdeCode = (event) => {
+      const { code } = event.detail;
+      if (code && editorRef.current) {
+        editorRef.current.setValue(code);
+        setCode(code);
+        setHasUnsavedChanges(true);
+        
+        // Show success message
+        setChatMessages(prev => [...prev, {
+          id: Date.now(),
+          role: 'assistant',
+          content: `✅ **Code applied from Global AI Assistant!**
+
+The code has been inserted into the editor. You can now:
+- Review and modify the code
+- Run it to test functionality
+- Save it to a file
+
+**Note:** The code has been marked as modified. Remember to save your changes!`,
+          timestamp: new Date()
+        }]);
+      }
+    };
+
+    window.addEventListener('setIdeCode', handleSetIdeCode);
+    return () => window.removeEventListener('setIdeCode', handleSetIdeCode);
+  }, []);
+
+  // Expose current language to Global AI Assistant
+  useEffect(() => {
+    const updateGlobalLanguage = () => {
+      window.currentWebIDELanguage = language;
+      console.log('Web IDE language updated:', language);
+    };
+    
+    updateGlobalLanguage();
+    
+    // Also expose a function to get current language
+    window.getWebIDELanguage = () => language;
+    
+    // Log when language changes for debugging
+    console.log('EnhancedWebIDE - Language changed to:', language);
+    
+    return () => {
+      delete window.currentWebIDELanguage;
+      delete window.getWebIDELanguage;
+    };
+  }, [language]);
 
   // Track code changes for GitHub files
   useEffect(() => {

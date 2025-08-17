@@ -3376,14 +3376,18 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
           currentCode = codeEditor.textContent || '';
         }
         
+        // Get current language setting from Web IDE
+        const currentLanguage = getCurrentWebIDELanguage();
+        context += `User is in the Web IDE with language set to: ${currentLanguage}. `;
+        
         // Also check selected resource
         if (selectedResource && selectedResource.notes) {
           currentCode = selectedResource.notes;
-          context += `User is in the Web IDE editing file: ${selectedResource.title}. Current code:\n\`\`\`\n${currentCode}\n\`\`\`\n\n`;
+          context += `User is editing file: ${selectedResource.title}. Current code:\n\`\`\`${currentLanguage}\n${currentCode}\n\`\`\`\n\n`;
         } else if (currentCode) {
-        context += `User is in the Web IDE. Current code in editor:\n\`\`\`\n${currentCode}\n\`\`\`\n\n`;
+          context += `Current code in editor:\n\`\`\`${currentLanguage}\n${currentCode}\n\`\`\`\n\n`;
         } else {
-          context += `User is in the Web IDE but no code is currently loaded.\n\n`;
+          context += `No code is currently loaded in the editor.\n\n`;
         }
       } else if (activeDevelopmentTab === 'github') {
         context += `User is in the GitHub editor. `;
@@ -3405,12 +3409,17 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
 
       context += `User message: ${currentInput}`;
 
+      // Get current Web IDE language for AI prompts
+      const currentLanguage = getCurrentWebIDELanguage();
+      console.log('Global AI Assistant - Current Web IDE language:', currentLanguage);
+      
       const response = await llmIntegration.chatWithAI(
         context,
         globalChatMessages.slice(-5).map(msg => ({
           role: msg.role === 'user' ? 'user' : 'assistant',
           content: msg.content
-        }))
+        })),
+        currentLanguage
       );
 
       // Check if the response contains file structure suggestions
@@ -3429,12 +3438,17 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
       }
 
       // Check if response contains code suggestions
-      const codeBlockRegex = /```(?:javascript|js|python|java|cpp|html|css)?\n([\s\S]*?)```/g;
+      const codeBlockRegex = /```(?:javascript|js|python|java|cpp|html|css|typescript|ts|tsx|jsx|csharp|php|ruby|go|rust|swift|kotlin|scala|r|matlab|sql|bash|shell|powershell|yaml|json|xml|html|css|scss|less|sass|stylus|markdown|md|text|plaintext)?\n?([\s\S]*?)```/gi;
       const codeMatches = [...response.matchAll(codeBlockRegex)];
       let codeSuggestion = null;
       
       if (codeMatches.length > 0) {
         codeSuggestion = codeMatches[0][1].trim();
+        console.log('Code extracted successfully:', codeSuggestion);
+      } else {
+        console.log('No code blocks found in response');
+        console.log('Response preview:', response.substring(0, 200) + '...');
+        console.log('Looking for code blocks with pattern: ```...```');
       }
 
       // Check if response contains document content (non-code text suggestions)
@@ -3581,6 +3595,11 @@ The key should start with 'gsk_'. Once configured, I'll be able to help you with
       const event = new CustomEvent('setIdeCode', { detail: { code } });
       window.dispatchEvent(event);
     }, 100);
+  };
+
+  // Get current Web IDE language for AI prompts
+  const getCurrentWebIDELanguage = () => {
+    return window.currentWebIDELanguage || window.getWebIDELanguage?.() || 'javascript';
   };
 
   const applyTextToGoogleDoc = async (text) => {

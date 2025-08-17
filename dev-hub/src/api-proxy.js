@@ -1,7 +1,7 @@
 // API Proxy for handling CORS issues with AI services
 class APIProxy {
   constructor() {
-    this.baseURL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3003';
+    this.baseURL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3002';
   }
 
   async callClaude(prompt, apiKey) {

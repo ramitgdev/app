@@ -1,25 +1,37 @@
 import OpenAI from 'openai';
 
+console.log('=== LLM Integration Debug ===');
+console.log('All environment variables:', process.env);
+console.log('REACT_APP_GROQ_API_KEY:', process.env.REACT_APP_GROQ_API_KEY);
+console.log('REACT_APP_GROQ_API_KEY type:', typeof process.env.REACT_APP_GROQ_API_KEY);
+console.log('REACT_APP_GROQ_API_KEY length:', process.env.REACT_APP_GROQ_API_KEY?.length);
+console.log('=== End Debug ===');
+
+console.log('Loaded Groq Key:', process.env.REACT_APP_GROQ_API_KEY);
+
 // Set dummy OPENAI_API_KEY if not present to prevent OpenAI library from throwing errors
 // We override the baseURL to use Groq anyway, so this dummy key won't be used
 if (!process.env.OPENAI_API_KEY) {
   process.env.OPENAI_API_KEY = 'dummy-key-for-groq-compatibility';
 }
 
-// Load the key for debug purposes (remove this line for production)
-console.log('Loaded Groq Key:', process.env.REACT_APP_GROQ_API_KEY);
-
 // Initialize Groq (OpenAI-compatible) client for Llama 3.3 70B
 let groq = null;
 
 // Function to get or create Groq client
 function getGroqClient() {
+  console.log('getGroqClient called');
+  console.log('Current groq client:', groq);
+  console.log('REACT_APP_GROQ_API_KEY available:', !!process.env.REACT_APP_GROQ_API_KEY);
+  
   if (!groq && process.env.REACT_APP_GROQ_API_KEY) {
+    console.log('Creating new Groq client...');
     groq = new OpenAI({
       apiKey: process.env.REACT_APP_GROQ_API_KEY,
       baseURL: 'https://api.groq.com/openai/v1',
       dangerouslyAllowBrowser: true // For DEV ONLY!
     });
+    console.log('Groq client created:', groq);
   }
   return groq;
 }
@@ -112,8 +124,16 @@ export class LLMIntegration {
 
   // Dynamic configuration check for Groq
   get isConfigured() {
-    return !!process.env.REACT_APP_GROQ_API_KEY &&
+    console.log('Checking Groq configuration...');
+    console.log('REACT_APP_GROQ_API_KEY:', process.env.REACT_APP_GROQ_API_KEY);
+    console.log('REACT_APP_GROQ_API_KEY type:', typeof process.env.REACT_APP_GROQ_API_KEY);
+    console.log('REACT_APP_GROQ_API_KEY starts with gsk_:', process.env.REACT_APP_GROQ_API_KEY?.startsWith('gsk_'));
+    
+    const isConfigured = !!process.env.REACT_APP_GROQ_API_KEY &&
            process.env.REACT_APP_GROQ_API_KEY.startsWith('gsk_');
+    
+    console.log('isConfigured result:', isConfigured);
+    return isConfigured;
   }
 
   // Helper method to make Groq API calls
@@ -122,24 +142,29 @@ export class LLMIntegration {
       throw new Error('Groq API key not configured. Please set REACT_APP_GROQ_API_KEY in your .env file.');
     }
     
-    const client = getGroqClient();
-    if (!client) {
-      throw new Error('Failed to initialize Groq client. Check your API key.');
-    }
-    
     try {
-      const messages = [];
-      if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
-      messages.push({ role: 'user', content: prompt });
-
-      const response = await client.chat.completions.create({
-        model: 'llama3-70b-8192', // Groq Llama 3.3 70B model
-        messages,
-        temperature,
-        max_tokens: 2000
+      // Use API proxy instead of direct client to avoid CORS issues
+      const response = await fetch('http://localhost:3002/api/groq', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: systemPrompt ? `${systemPrompt}\n\nUser: ${prompt}` : prompt,
+          apiKey: process.env.REACT_APP_GROQ_API_KEY,
+          model: 'llama3-70b-8192',
+          maxTokens: 2000,
+          temperature: temperature
+        })
       });
 
-      return response.choices[0].message.content;
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      return data.response;
     } catch (error) {
       console.error('Groq API Error:', error);
       throw new Error(`Groq API call failed: ${error.message}`);
@@ -375,31 +400,70 @@ export class LLMIntegration {
     }
   }
 
-  async chatWithAI(message, conversationHistory = []) {
+  async chatWithAI(message, conversationHistory = [], targetLanguage = null) {
     try {
+      console.log('chatWithAI called with message:', message);
+      console.log('isConfigured check:', this.isConfigured);
+      console.log('Target language:', targetLanguage);
+      
       if (!this.isConfigured) {
+        console.log('Groq not configured, returning fallback message');
         return "I'm here to help! I can assist with code generation, project planning, and technical guidance. What would you like to work on?";
       }
 
-      const messages = [
-        { role: 'system', content: 'You are a helpful AI assistant for developers. You can help with coding, project planning, debugging, and technical guidance. Be concise, practical, and provide actionable advice.' },
-        ...conversationHistory,
-        { role: 'user', content: message }
-      ];
+      console.log('Groq is configured, proceeding with API call');
+      
+      // Format conversation history for the API
+      const conversationText = conversationHistory
+        .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+        .join('\n');
+      
+      const fullPrompt = conversationText ? `${conversationText}\n\nUser: ${message}` : message;
+      
+      // Check if this is a code generation request
+      const isCodeRequest = message.toLowerCase().includes('write') || 
+                           message.toLowerCase().includes('generate') || 
+                           message.toLowerCase().includes('create') || 
+                           message.toLowerCase().includes('code') ||
+                           message.toLowerCase().includes('function') ||
+                           message.toLowerCase().includes('loop') ||
+                           message.toLowerCase().includes('class');
+      
+      // Determine the language to use for code generation
+      const language = targetLanguage || 'javascript';
+      
+      const systemPrompt = isCodeRequest 
+        ? `You are a code generation assistant. CRITICAL: You MUST follow this EXACT format:\n\n1. ONE sentence explanation\n2. Code block in ${language}\n3. STOP - nothing else\n\nFORMAT:\n\n[One sentence explanation]\n\n\`\`\`${language}\n[Code only]\n\`\`\`\n\nDO NOT ADD ANYTHING ELSE. NO explanations after the code. NO additional text. JUST the explanation sentence and the code block. IMPORTANT: Generate code in ${language} syntax.`
+        : `You are a helpful AI assistant for developers. When asked to generate code:\n\n1. Provide ONLY the code in a code block\n2. Use this format: \`\`\`${language}\n// Your code here\n\`\`\`\n3. Keep explanations to 1-2 sentences maximum\n4. Focus on clean, working code in ${language}\n\nFor non-code requests, provide helpful guidance.`;
 
-      const client = getGroqClient();
-      if (!client) {
-        throw new Error('Groq client not available');
-      }
-
-      const response = await client.chat.completions.create({
-        model: 'llama3-70b-8192',
-        messages: messages,
-        temperature: 0.7,
-        max_tokens: 1000
+      console.log('Making Groq API call via proxy...');
+      console.log('System Prompt:', systemPrompt);
+      console.log('Full Prompt:', fullPrompt);
+      console.log('Is Code Request:', isCodeRequest);
+      
+      const response = await fetch('http://localhost:3002/api/groq', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: fullPrompt,
+          systemPrompt: systemPrompt,
+          apiKey: process.env.REACT_APP_GROQ_API_KEY,
+          model: 'llama3-70b-8192',
+          maxTokens: 1000,
+          temperature: isCodeRequest ? 0.1 : 0.7
+        })
       });
 
-      return response.choices[0].message.content;
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('Groq API response received:', data.response);
+      return data.response;
     } catch (error) {
       console.error('Error in AI chat:', error);
       return "I'm here to help! I can assist with code generation, project planning, and technical guidance. What would you like to work on?";
@@ -413,21 +477,38 @@ export class LLMIntegration {
 
   // Get configuration status
   getConfigurationStatus() {
+    console.log('getConfigurationStatus called');
+    console.log('process.env keys:', Object.keys(process.env));
+    console.log('REACT_APP_ keys:', Object.keys(process.env).filter(key => key.startsWith('REACT_APP_')));
+    
     if (!process.env.REACT_APP_GROQ_API_KEY) {
       return {
         configured: false,
-        message: "Groq API key not found. Please add REACT_APP_GROQ_API_KEY to your .env file."
+        message: "Groq API key not found. Please add REACT_APP_GROQ_API_KEY to your .env file.",
+        debug: {
+          envKeys: Object.keys(process.env),
+          reactAppKeys: Object.keys(process.env).filter(key => key.startsWith('REACT_APP_')),
+          groqKey: process.env.REACT_APP_GROQ_API_KEY
+        }
       };
     }
     if (!process.env.REACT_APP_GROQ_API_KEY.startsWith('gsk_')) {
       return {
         configured: false,
-        message: "Groq API key appears malformed (should start with 'gsk_')."
+        message: "Groq API key appears malformed (should start with 'gsk_').",
+        debug: {
+          groqKey: process.env.REACT_APP_GROQ_API_KEY,
+          startsWithGsk: process.env.REACT_APP_GROQ_API_KEY.startsWith('gsk_')
+        }
       };
     }
     return {
       configured: true,
-      message: "Groq API is properly configured and ready to use."
+      message: "Groq API is properly configured and ready to use.",
+      debug: {
+        groqKey: process.env.REACT_APP_GROQ_API_KEY,
+        startsWithGsk: process.env.REACT_APP_GROQ_API_KEY.startsWith('gsk_')
+      }
     };
   }
 }

@@ -63,12 +63,27 @@ export default function EnhancedAIAssistant({
   const [isGithubLoading, setIsGithubLoading] = useState(false);
   const [lastCreatedFiles, setLastCreatedFiles] = useState([]);
 
+  // Debug state
+  const [configStatus, setConfigStatus] = useState(null);
+
   // GitHub token validation and user info
   useEffect(() => {
     if (githubToken) {
       validateAndSetUser();
     }
   }, [githubToken]);
+
+  // Debug: Show configuration status
+  useEffect(() => {
+    const status = llmIntegration.getConfigurationStatus();
+    setConfigStatus(status);
+    console.log('AI Assistant Configuration Status:', status);
+    
+    if (!status.configured) {
+      console.error('AI Assistant not configured:', status.message);
+      console.error('Debug info:', status.debug);
+    }
+  }, []);
 
   const validateAndSetUser = async () => {
     if (!githubToken) return;
@@ -1060,6 +1075,28 @@ Your files have been successfully uploaded to GitHub!`,
             </IconButton>
           </Box>
         </Box>
+        
+        {/* Debug Panel */}
+        {configStatus && (
+          <Box sx={{
+            p: 1,
+            backgroundColor: configStatus.configured ? '#e8f5e8' : '#ffeaea',
+            borderBottom: '1px solid #e0e0e0',
+            fontSize: '0.75rem'
+          }}>
+            <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
+              Debug: {configStatus.message}
+            </Typography>
+            {!configStatus.configured && configStatus.debug && (
+              <Box sx={{ mt: 0.5, fontFamily: 'monospace', fontSize: '0.7rem' }}>
+                <div>Env Keys: {configStatus.debug.envKeys?.length || 0}</div>
+                <div>React App Keys: {configStatus.debug.reactAppKeys?.length || 0}</div>
+                <div>Groq Key: {configStatus.debug.groqKey ? `${configStatus.debug.groqKey.substring(0, 10)}...` : 'undefined'}</div>
+                <div>Starts with gsk_: {configStatus.debug.startsWithGsk ? 'true' : 'false'}</div>
+              </Box>
+            )}
+          </Box>
+        )}
 
         {/* Messages */}
         <Box sx={{
