@@ -68,6 +68,9 @@ import RefactorIcon from '@mui/icons-material/Transform';
 import NoteAddIcon from '@mui/icons-material/NoteAdd';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SettingsIcon from '@mui/icons-material/Settings';
+import FullscreenIcon from '@mui/icons-material/Fullscreen';
+import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
+import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import WorkIcon from '@mui/icons-material/Work';
 import SchoolIcon from '@mui/icons-material/School';
@@ -2948,6 +2951,1431 @@ What specific aspect of your ${appType} project would you like to discuss?`;
 // ---- GitHub Helper Functions ----
 // (extractGitHubInfo function is defined above at line 861)
 
+// Enhanced File Explorer Component
+function EnhancedFileExplorer({ 
+  folders, 
+  resources, 
+  activeFolder, 
+  setActiveFolder, 
+  editResource, 
+  removeResource, 
+  addChildFolder, 
+  renameFolder, 
+  deleteFolder, 
+  hasAnyChildren,
+  viewState,
+  setViewState,
+  renderTreeNode,
+  setFolders,
+  setResources
+}) {
+  const { isFullscreen, isWideMode } = viewState;
+  
+  // State for expanded folders
+  const [expandedFolders, setExpandedFolders] = useState(new Set());
+  
+  // Global variables that need to be available
+  const globalGithubToken = localStorage.getItem('github_token');
+  const setGoogleDocUrl = () => {}; // Placeholder - this should be passed as prop if needed
+  const setActiveDevelopmentTab = () => {}; // Placeholder - this should be passed as prop if needed
+  const setSelectedResource = () => {}; // Placeholder - this should be passed as prop if needed
+
+  // Handle escape key for fullscreen exit
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape' && isFullscreen) {
+        setViewState(prev => ({ ...prev, isFullscreen: false }));
+      }
+    };
+
+    if (isFullscreen) {
+      document.addEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isFullscreen, setViewState]);
+
+  const renderHeader = () => (
+    <Box sx={{ 
+      borderBottom: 1, 
+      borderColor: 'divider', 
+      backgroundColor: 'background.paper',
+      position: 'sticky',
+      top: 0,
+      zIndex: 1
+    }}>
+      <Box sx={{ p: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            📁 File Explorer
+          </Typography>
+          
+          <Stack direction="row" spacing={1}>
+            <Tooltip title={isWideMode ? "Normal width" : "Wide mode"}>
+              <IconButton
+                size="small"
+                onClick={() => setViewState(prev => ({ ...prev, isWideMode: !prev.isWideMode }))}
+                sx={{ 
+                  color: isWideMode ? 'primary.main' : 'text.secondary',
+                  '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                }}
+              >
+                <OpenInFullIcon />
+              </IconButton>
+            </Tooltip>
+            
+            <Tooltip title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
+              <IconButton
+                size="small"
+                onClick={() => setViewState(prev => ({ ...prev, isFullscreen: !prev.isFullscreen }))}
+                sx={{ 
+                  color: isFullscreen ? 'primary.main' : 'text.secondary',
+                  '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                }}
+              >
+                {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </Box>
+      </Box>
+    </Box>
+  );
+
+  // Enhanced renderTreeNode with drag and drop
+  const renderTreeNodeWithDragDrop = (node, folders, resources, activeFolder, setActiveFolder, editResource, removeResource, addChildFolder, renameFolder, deleteFolder, hasAnyChildren, depth = 0) => {
+    if (!node) return null;
+    const childFolders = folders.filter(f => f.parent === node.id && f.id !== node.id);
+    const childFiles = resources.filter(r => r.folder === node.id);
+    const isExpanded = expandedFolders.has(node.id);
+    const hasChildren = childFolders.length > 0 || childFiles.length > 0;
+    
+    // Helper functions that need to be available
+    const toggleFolderExpansion = (folderId) => {
+      setExpandedFolders(prev => 
+        prev.has(folderId) ? new Set([...prev].filter(id => id !== folderId)) : new Set([...prev, folderId])
+      );
+    };
+    
+    const isGoogleDocResource = (resource) => {
+      return resource.platform === 'gdocs' || resource.url?.includes('docs.google.com');
+    };
+    
+    const isGitHubResource = (resource) => {
+      return resource.platform === 'github' || resource.url?.includes('github.com');
+    };
+    
+    const extractGitHubInfo = (url) => {
+      const match = url.match(/github\.com\/([^\/]+\/[^\/]+)\/blob\/([^\/]+)\/(.+)/);
+      if (match) {
+        return {
+          repoFullName: match[1],
+          branch: match[2],
+          filePath: match[3]
+        };
+      }
+      return null;
+    };
+    
+    const handleDragStart = (e, item, type) => {
+      e.dataTransfer.setData('application/json', JSON.stringify({ id: item.id, type, text: item.text || item.title }));
+      e.dataTransfer.effectAllowed = 'move';
+    };
+
+    const handleDragOver = (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    };
+
+    const handleDrop = (e, targetFolderId) => {
+      e.preventDefault();
+      try {
+        const dragData = JSON.parse(e.dataTransfer.getData('application/json'));
+        
+        if (dragData.type === 'folder') {
+          // Move folder
+          if (dragData.id !== targetFolderId && dragData.id !== ROOT_ID) {
+            const updatedFolders = folders.map(f => 
+              f.id === dragData.id ? { ...f, parent: targetFolderId } : f
+            );
+            setFolders(updatedFolders);
+          }
+        } else if (dragData.type === 'file') {
+          // Move file
+          const updatedResources = resources.map(r => 
+            r.id === dragData.id ? { ...r, folder: targetFolderId } : r
+          );
+          setResources(updatedResources);
+        }
+      } catch (error) {
+        console.error('Error handling drop:', error);
+      }
+    };
+
+    return (
+      <div key={node.id}>
+        <Box 
+          className={node.id === activeFolder ? 'mui-folder' : ''} 
+          sx={{ 
+            ml: depth * 2, 
+            fontWeight: node.id === 0 ? 800 : 600, 
+            cursor: 'pointer', 
+            display: 'flex', 
+            alignItems: 'center', 
+            px: 1, 
+            py: 0.5,
+            border: '2px dashed transparent',
+            '&:hover': {
+              border: '2px dashed #1976d2',
+              backgroundColor: 'rgba(25, 118, 210, 0.04)'
+            }
+          }} 
+          onClick={() => setActiveFolder(node.id)}
+          draggable={node.id !== ROOT_ID}
+          onDragStart={(e) => handleDragStart(e, node, 'folder')}
+          onDragOver={handleDragOver}
+          onDrop={(e) => handleDrop(e, node.id)}
+        >
+          {hasChildren && (
+            <IconButton 
+              size="small" 
+              onClick={e => { e.stopPropagation(); toggleFolderExpansion(node.id); }}
+              sx={{ mr: 0.5, p: 0.25 }}
+            >
+              {isExpanded ? '▼' : '▶'}
+            </IconButton>
+          )}
+          {!hasChildren && <Box sx={{ width: 20, mr: 0.5 }} />}
+          <FolderIcon sx={{ mr: 1, color: 'primary.main' }} />
+          <Typography sx={{ flex: 1 }} fontWeight={node.id === 0 ? 800 : 600}>
+            {node.text}
+            {node.id !== ROOT_ID && (
+              <Chip 
+                label="Drag to move" 
+                size="small" 
+                sx={{ ml: 1, fontSize: '0.6rem', height: 16 }}
+                color="primary"
+                variant="outlined"
+              />
+            )}
+          </Typography>
+          <Tooltip title="Add subfolder">
+            <IconButton size="small" color="primary" onClick={e => { e.stopPropagation(); addChildFolder(node.id); }}>
+              <AddIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          {node.id !== 0 && (
+            <>
+              <Tooltip title="Rename">
+                <IconButton size="small" color="info" onClick={e => { e.stopPropagation(); renameFolder(node.id); }}>
+                  <EditIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Delete">
+                <IconButton size="small" sx={{ color: 'error.main' }} onClick={e => { e.stopPropagation(); deleteFolder(node.id); }}>
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
+        </Box>
+        {/* Only render children if expanded */}
+        {isExpanded && (
+          <>
+            {/* Render child files */}
+            {childFiles.map(childFile => (
+              <Box 
+                key={childFile.id} 
+                className="mui-resource" 
+                sx={{ 
+                  ml: (depth + 1) * 2, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  cursor: 'grab', 
+                  px: 1, 
+                  py: 0.5, 
+                  bgcolor: '#fff7de', 
+                  border: '1px dotted #eee',
+                  '&:hover': {
+                    border: '2px dashed #1976d2',
+                    backgroundColor: 'rgba(25, 118, 210, 0.04)'
+                  }
+                }} 
+                onClick={async () => {
+                  // Check if it's a Google Doc and open in editor
+                  if (isGoogleDocResource(childFile)) {
+                    setGoogleDocUrl(childFile.url);
+                    setActiveDevelopmentTab('gdocs');
+                  } else if (isGitHubResource(childFile)) {
+                    // Open GitHub files in Web IDE with GitHub integration
+                    const githubInfo = extractGitHubInfo(childFile.url);
+                    if (githubInfo) {
+                      // Create a GitHub-aware resource for the Web IDE
+                      const githubResource = {
+                        ...childFile,
+                        isGitHubFile: true,
+                        githubInfo: githubInfo,
+                        title: githubInfo.filePath.split('/').pop() || childFile.title,
+                        platform: 'github'
+                      };
+                      
+                      // Try to fetch the file content from GitHub
+                      try {
+                        const response = await fetch(`https://api.github.com/repos/${githubInfo.repoFullName}/contents/${githubInfo.filePath}`, {
+                          headers: globalGithubToken ? {
+                            'Authorization': `token ${globalGithubToken}`
+                          } : {}
+                        });
+                        
+                        if (response.ok) {
+                          const data = await response.json();
+                          
+                          // GitHub API returns base64 encoded content for files
+                          if (data.content && data.encoding === 'base64') {
+                            const content = atob(data.content.replace(/\s/g, ''));
+                            githubResource.notes = content;
+                            githubResource.originalContent = content; // Store original for comparison
+                          } else if (data.download_url) {
+                            // Fallback: fetch from download_url for raw content
+                            const rawResponse = await fetch(data.download_url);
+                            if (rawResponse.ok) {
+                              const content = await rawResponse.text();
+                              githubResource.notes = content;
+                              githubResource.originalContent = content;
+                            }
+                        } else {
+                            githubResource.notes = `// Could not decode content from GitHub\n// Repository: ${githubInfo.repoFullName}\n// File: ${githubInfo.filePath}\n// Response type: ${data.type}`;
+                        }
+                      } else {
+                          githubResource.notes = `// Could not fetch content from GitHub\n// Repository: ${githubInfo.repoFullName}\n// File: ${githubInfo.filePath}\n// Please check your GitHub token or repository access.`;
+                        }
+                      } catch (error) {
+                        console.error('Error fetching GitHub file:', error);
+                        githubResource.notes = `// Error fetching content from GitHub\n// Repository: ${githubInfo.repoFullName}\n// File: ${githubInfo.filePath}\n// Error: ${error.message}`;
+                      }
+                      
+                      setSelectedResource(githubResource);
+                      setActiveDevelopmentTab('web-ide');
+                    } else {
+                      // Fallback if GitHub info extraction fails
+                      setSelectedResource(childFile);
+                      setActiveDevelopmentTab('web-ide');
+                    }
+                  } else {
+                    // Open local files in Web IDE
+                    setSelectedResource(childFile);
+                    setActiveDevelopmentTab('web-ide');
+                  }
+                }} 
+                title="Click to edit"
+                draggable
+                onDragStart={(e) => handleDragStart(e, childFile, 'file')}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, childFile.folder)}
+              >
+                <Box sx={{ width: 20, mr: 0.5 }} />
+                {isGoogleDocResource(childFile) ? (
+                  <GoogleIcon sx={{ mr: 1, color: 'primary.main' }} />
+                ) : isGitHubResource(childFile) ? (
+                  <GitHubIcon sx={{ mr: 1, color: 'secondary.main' }} />
+                ) : (
+                  <InsertDriveFileIcon sx={{ mr: 1, color: 'warning.main' }} />
+                )}
+                <Typography sx={{ flex: 1 }}>
+                  {childFile.title}
+                  <Chip 
+                    label="Drag to move" 
+                    size="small" 
+                    sx={{ ml: 1, fontSize: '0.6rem', height: 16 }}
+                    color="secondary"
+                    variant="outlined"
+                  />
+                </Typography>
+                <Tooltip title="Edit resource">
+                  <IconButton size="small" color="info" onClick={e => { e.stopPropagation(); editResource(childFile); }}>
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Delete resource">
+                  <IconButton size="small" sx={{ color: 'error.main' }} onClick={e => { e.stopPropagation(); removeResource(childFile.id); }}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            ))}
+            {/* Recursively render child folders */}
+            {childFolders.map(childFolder =>
+              renderTreeNodeWithDragDrop(childFolder, folders, resources, activeFolder, setActiveFolder, editResource, removeResource, addChildFolder, renameFolder, deleteFolder, hasAnyChildren, depth + 1)
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const renderContent = () => (
+    <Box sx={{ 
+      flex: 1, 
+      overflowY: 'auto', 
+      backgroundColor: 'grey.50',
+      p: 2
+    }}>
+      {folders.find(f => f.id === ROOT_ID) && 
+        renderTreeNodeWithDragDrop(folders.find(f => f.id === ROOT_ID), folders, resources, activeFolder, setActiveFolder, editResource, removeResource, addChildFolder, renameFolder, deleteFolder, hasAnyChildren)
+      }
+    </Box>
+  );
+
+  // Fullscreen overlay
+  if (isFullscreen) {
+    return (
+      <Box
+        sx={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 9999,
+          backgroundColor: 'background.default',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
+        {/* Fullscreen Header */}
+        <Box sx={{ 
+          borderBottom: 1, 
+          borderColor: 'divider', 
+          backgroundColor: 'background.paper',
+          p: 2
+        }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h5" sx={{ fontWeight: 600 }}>
+              📁 File Explorer - Fullscreen Mode
+            </Typography>
+            
+            <Stack direction="row" spacing={1}>
+              <Tooltip title={isWideMode ? "Normal width" : "Wide mode"}>
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isWideMode: !prev.isWideMode }))}
+                  sx={{ 
+                    color: isWideMode ? 'primary.main' : 'text.secondary',
+                    '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                  }}
+                >
+                  <OpenInFullIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Exit fullscreen (ESC)">
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isFullscreen: false }))}
+                  sx={{ 
+                    color: 'text.secondary',
+                    '&:hover': { backgroundColor: 'error.light', color: 'white' }
+                  }}
+                >
+                  <CloseIcon />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          </Box>
+        </Box>
+
+        {/* Fullscreen Content */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {renderContent()}
+        </Box>
+      </Box>
+    );
+  }
+
+  // Wide mode overlay
+  if (isWideMode && !isFullscreen) {
+    return (
+      <Box
+        sx={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 9998,
+          width: '80vw',
+          maxWidth: '1200px',
+          height: '80vh',
+          maxHeight: '800px',
+          backgroundColor: 'background.paper',
+          borderRadius: 2,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+          border: '1px solid',
+          borderColor: 'divider',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Wide Mode Header */}
+        <Box sx={{ 
+          borderBottom: 1, 
+          borderColor: 'divider', 
+          backgroundColor: 'background.paper',
+          p: 2
+        }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              📁 File Explorer - Wide Mode
+            </Typography>
+            
+            <Stack direction="row" spacing={1}>
+              <Tooltip title="Normal width">
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isWideMode: false }))}
+                  sx={{ 
+                    color: 'primary.main',
+                    '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                  }}
+                >
+                  <OpenInFullIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Fullscreen">
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isFullscreen: true }))}
+                  sx={{ 
+                    color: 'text.secondary',
+                    '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                  }}
+                >
+                  <FullscreenIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Close wide mode">
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isWideMode: false }))}
+                  sx={{ 
+                    color: 'text.secondary',
+                    '&:hover': { backgroundColor: 'error.light', color: 'white' }
+                  }}
+                >
+                  <CloseIcon />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          </Box>
+        </Box>
+
+        {/* Wide Mode Content */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {renderContent()}
+        </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <Card sx={{ 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      borderRadius: 2,
+      overflow: 'hidden',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+      border: '1px solid',
+      borderColor: 'divider'
+    }}>
+      {renderHeader()}
+      {renderContent()}
+    </Card>
+  );
+}
+
+// Enhanced Team Component
+function EnhancedTeam({ 
+  collaborators, 
+  selectedWksp, 
+  setShowShare,
+  viewState,
+  setViewState
+}) {
+  const { isFullscreen, isWideMode } = viewState;
+
+  // Handle escape key for fullscreen exit
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape' && isFullscreen) {
+        setViewState(prev => ({ ...prev, isFullscreen: false }));
+      }
+    };
+
+    if (isFullscreen) {
+      document.addEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isFullscreen, setViewState]);
+
+  const renderHeader = () => (
+    <Box sx={{ 
+      borderBottom: 1, 
+      borderColor: 'divider', 
+      backgroundColor: 'background.paper',
+      position: 'sticky',
+      top: 0,
+      zIndex: 1
+    }}>
+      <Box sx={{ p: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            👥 Team
+          </Typography>
+          
+          <Stack direction="row" spacing={1}>
+            <Tooltip title={isWideMode ? "Normal width" : "Wide mode"}>
+              <IconButton
+                size="small"
+                onClick={() => setViewState(prev => ({ ...prev, isWideMode: !prev.isWideMode }))}
+                sx={{ 
+                  color: isWideMode ? 'primary.main' : 'text.secondary',
+                  '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                }}
+              >
+                <OpenInFullIcon />
+              </IconButton>
+            </Tooltip>
+            
+            <Tooltip title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
+              <IconButton
+                size="small"
+                onClick={() => setViewState(prev => ({ ...prev, isFullscreen: !prev.isFullscreen }))}
+                sx={{ 
+                  color: isFullscreen ? 'primary.main' : 'text.secondary',
+                  '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                }}
+              >
+                {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </Box>
+      </Box>
+    </Box>
+  );
+
+  const renderContent = () => (
+    <Box sx={{ 
+      flex: 1, 
+      overflowY: 'auto', 
+      backgroundColor: 'grey.50',
+      p: 2
+    }}>
+      <List dense>
+        <ListItem>
+          <ListItemIcon>
+            <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
+              {collaborators.users.find(u=>u.id === collaborators.ownerId)?.email?.[0]?.toUpperCase() || '?'}
+            </Avatar>
+          </ListItemIcon>
+          <ListItemText
+            primary={
+              <Typography variant="body2" fontWeight={600}>
+                {collaborators.users.find(u=>u.id === collaborators.ownerId)?.email || "Unknown"}
+              </Typography>
+            }
+            secondary="Owner"
+          />
+        </ListItem>
+        {collaborators.members.map(mem => {
+          const user = collaborators.users.find(u => u.id === mem.user_id);
+          const isAccepted = !!mem.user_id;
+          const lastSeen = user?.last_seen ? new Date(user.last_seen) : null;
+          const online = isAccepted && lastSeen && (Date.now() - lastSeen.getTime() < 2*60*1000);
+          return (
+            <ListItem key={mem.id}>
+              <ListItemIcon>
+                <Avatar sx={{ width: 32, height: 32, bgcolor: isAccepted ? 'success.main' : 'warning.main' }}>
+                  {mem.user_email?.[0]?.toUpperCase() || '?'}
+                </Avatar>
+              </ListItemIcon>
+              <ListItemText
+                primary={
+                  <Typography variant="body2" fontWeight={600}>
+                    {mem.user_email}
+                  </Typography>
+                }
+                secondary={
+                  <Typography variant="caption" color={online ? 'success.main' : 'text.secondary'}>
+                    {isAccepted ? (online ? '● Online' : '● Offline') : '● Pending'}
+                  </Typography>
+                }
+              />
+            </ListItem>
+          );
+        })}
+      </List>
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={<ShareIcon />}
+        onClick={() => setShowShare(selectedWksp.id)}
+        sx={{ mt: 1 }}
+      >
+        Invite
+      </Button>
+    </Box>
+  );
+
+  // Fullscreen overlay
+  if (isFullscreen) {
+    return (
+      <Box
+        sx={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 9999,
+          backgroundColor: 'background.default',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
+        {/* Fullscreen Header */}
+        <Box sx={{ 
+          borderBottom: 1, 
+          borderColor: 'divider', 
+          backgroundColor: 'background.paper',
+          p: 2
+        }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h5" sx={{ fontWeight: 600 }}>
+              👥 Team - Fullscreen Mode
+            </Typography>
+            
+            <Stack direction="row" spacing={1}>
+              <Tooltip title={isWideMode ? "Normal width" : "Wide mode"}>
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isWideMode: !prev.isWideMode }))}
+                  sx={{ 
+                    color: isWideMode ? 'primary.main' : 'text.secondary',
+                    '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                  }}
+                >
+                  <OpenInFullIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Exit fullscreen (ESC)">
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isFullscreen: false }))}
+                  sx={{ 
+                    color: 'text.secondary',
+                    '&:hover': { backgroundColor: 'error.light', color: 'white' }
+                  }}
+                >
+                  <CloseIcon />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          </Box>
+        </Box>
+
+        {/* Fullscreen Content */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {renderContent()}
+        </Box>
+      </Box>
+    );
+  }
+
+  // Wide mode overlay
+  if (isWideMode && !isFullscreen) {
+    return (
+      <Box
+        sx={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 9998,
+          width: '80vw',
+          maxWidth: '1200px',
+          height: '80vh',
+          maxHeight: '800px',
+          backgroundColor: 'background.paper',
+          borderRadius: 2,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+          border: '1px solid',
+          borderColor: 'divider',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Wide Mode Header */}
+        <Box sx={{ 
+          borderBottom: 1, 
+          borderColor: 'divider', 
+          backgroundColor: 'background.paper',
+          p: 2
+        }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              👥 Team - Wide Mode
+            </Typography>
+            
+            <Stack direction="row" spacing={1}>
+              <Tooltip title="Normal width">
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isWideMode: false }))}
+                  sx={{ 
+                    color: 'primary.main',
+                    '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                  }}
+                >
+                  <OpenInFullIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Fullscreen">
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isFullscreen: true }))}
+                  sx={{ 
+                    color: 'text.secondary',
+                    '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                  }}
+                >
+                  <FullscreenIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Close wide mode">
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isWideMode: false }))}
+                  sx={{ 
+                    color: 'text.secondary',
+                    '&:hover': { backgroundColor: 'error.light', color: 'white' }
+                  }}
+                >
+                  <CloseIcon />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          </Box>
+        </Box>
+
+        {/* Wide Mode Content */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {renderContent()}
+        </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <Card sx={{ 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      borderRadius: 2,
+      overflow: 'hidden',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+      border: '1px solid',
+      borderColor: 'divider'
+    }}>
+      {renderHeader()}
+      {renderContent()}
+    </Card>
+  );
+}
+
+// Enhanced AI Tools Component
+function EnhancedAiTools({ 
+  setShowEnhancedAI, 
+  setShowStorageTest, 
+  selectedWksp, 
+  resources, 
+  setGlobalSnackbar,
+  user,
+  viewState,
+  setViewState
+}) {
+  const { isFullscreen, isWideMode } = viewState;
+
+  // Handle escape key for fullscreen exit
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape' && isFullscreen) {
+        setViewState(prev => ({ ...prev, isFullscreen: false }));
+      }
+    };
+
+    if (isFullscreen) {
+      document.addEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isFullscreen, setViewState]);
+
+  const renderHeader = () => (
+    <Box sx={{ 
+      borderBottom: 1, 
+      borderColor: 'divider', 
+      backgroundColor: 'background.paper',
+      position: 'sticky',
+      top: 0,
+      zIndex: 1
+    }}>
+      <Box sx={{ p: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            🤖 AI Tools
+          </Typography>
+          
+          <Stack direction="row" spacing={1}>
+            <Tooltip title={isWideMode ? "Normal width" : "Wide mode"}>
+              <IconButton
+                size="small"
+                onClick={() => setViewState(prev => ({ ...prev, isWideMode: !prev.isWideMode }))}
+                sx={{ 
+                  color: isWideMode ? 'primary.main' : 'text.secondary',
+                  '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                }}
+              >
+                <OpenInFullIcon />
+              </IconButton>
+            </Tooltip>
+            
+            <Tooltip title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
+              <IconButton
+                size="small"
+                onClick={() => setViewState(prev => ({ ...prev, isFullscreen: !prev.isFullscreen }))}
+                sx={{ 
+                  color: isFullscreen ? 'primary.main' : 'text.secondary',
+                  '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                }}
+              >
+                {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </Box>
+      </Box>
+    </Box>
+  );
+
+  const renderContent = () => (
+    <Box sx={{ 
+      flex: 1, 
+      overflowY: 'auto', 
+      backgroundColor: 'grey.50',
+      p: 2
+    }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {/* Enhanced AI Assistant Button */}
+        <Button
+          variant="contained"
+          startIcon={<SmartToyIcon />}
+          onClick={() => setShowEnhancedAI(true)}
+          sx={{
+            bgcolor: 'primary.main',
+            '&:hover': { bgcolor: 'primary.dark' },
+            mb: 2
+          }}
+        >
+          🚀 Enhanced AI Assistant
+        </Button>
+
+        {/* Storage Test Button */}
+        <Button
+          variant="outlined"
+          startIcon={<StorageIcon />}
+          onClick={() => setShowStorageTest(true)}
+          sx={{
+            borderColor: 'success.main',
+            color: 'success.main',
+            '&:hover': { 
+              borderColor: 'success.dark',
+              bgcolor: 'success.light',
+              color: 'success.dark'
+            },
+            mb: 2
+          }}
+        >
+          🗄️ Test Storage Integration
+        </Button>
+
+        {/* File Migration Button */}
+        <SupabaseFileMigration 
+          open={false}
+          onClose={() => {}}
+          workspaceId={selectedWksp.id}
+          localResources={resources}
+          onMigrationComplete={(result) => {
+            console.log('Migration completed:', result);
+            setGlobalSnackbar({
+              open: true,
+              message: `Migration completed: ${result.success} files migrated`,
+              severity: 'success'
+            });
+          }}
+        />
+        
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Create files, generate projects, and manage your workspace with AI
+        </Typography>
+        
+        <AICodeReviewer 
+          workspaceId={selectedWksp.id} 
+          currentUser={user}
+        />
+      </Box>
+    </Box>
+  );
+
+  // Fullscreen overlay
+  if (isFullscreen) {
+    return (
+      <Box
+        sx={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 9999,
+          backgroundColor: 'background.default',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
+        {/* Fullscreen Header */}
+        <Box sx={{ 
+          borderBottom: 1, 
+          borderColor: 'divider', 
+          backgroundColor: 'background.paper',
+          p: 2
+        }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h5" sx={{ fontWeight: 600 }}>
+              🤖 AI Tools - Fullscreen Mode
+            </Typography>
+            
+            <Stack direction="row" spacing={1}>
+              <Tooltip title={isWideMode ? "Normal width" : "Wide mode"}>
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isWideMode: !prev.isWideMode }))}
+                  sx={{ 
+                    color: isWideMode ? 'primary.main' : 'text.secondary',
+                    '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                  }}
+                >
+                  <OpenInFullIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Exit fullscreen (ESC)">
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isFullscreen: false }))}
+                  sx={{ 
+                    color: 'text.secondary',
+                    '&:hover': { backgroundColor: 'error.light', color: 'white' }
+                  }}
+                >
+                  <CloseIcon />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          </Box>
+        </Box>
+
+        {/* Fullscreen Content */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {renderContent()}
+        </Box>
+      </Box>
+    );
+  }
+
+  // Wide mode overlay
+  if (isWideMode && !isFullscreen) {
+    return (
+      <Box
+        sx={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 9998,
+          width: '80vw',
+          maxWidth: '1200px',
+          height: '80vh',
+          maxHeight: '800px',
+          backgroundColor: 'background.paper',
+          borderRadius: 2,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+          border: '1px solid',
+          borderColor: 'divider',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Wide Mode Header */}
+        <Box sx={{ 
+          borderBottom: 1, 
+          borderColor: 'divider', 
+          backgroundColor: 'background.paper',
+          p: 2
+        }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              🤖 AI Tools - Wide Mode
+            </Typography>
+            
+            <Stack direction="row" spacing={1}>
+              <Tooltip title="Normal width">
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isWideMode: false }))}
+                  sx={{ 
+                    color: 'primary.main',
+                    '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                  }}
+                >
+                  <OpenInFullIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Fullscreen">
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isFullscreen: true }))}
+                  sx={{ 
+                    color: 'text.secondary',
+                    '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                  }}
+                >
+                  <FullscreenIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Close wide mode">
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isWideMode: false }))}
+                  sx={{ 
+                    color: 'text.secondary',
+                    '&:hover': { backgroundColor: 'error.light', color: 'white' }
+                  }}
+                >
+                  <CloseIcon />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          </Box>
+        </Box>
+
+        {/* Wide Mode Content */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {renderContent()}
+        </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <Card sx={{ 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      borderRadius: 2,
+      overflow: 'hidden',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+      border: '1px solid',
+      borderColor: 'divider'
+    }}>
+      {renderHeader()}
+      {renderContent()}
+    </Card>
+  );
+}
+
+// Enhanced Resources Component
+function EnhancedResources({ 
+  folderResources, 
+  setSelectedResource,
+  viewState,
+  setViewState
+}) {
+  const { isFullscreen, isWideMode } = viewState;
+
+  // Handle escape key for fullscreen exit
+  useEffect(() => {
+    const handleEscape = (event) => {
+      if (event.key === 'Escape' && isFullscreen) {
+        setViewState(prev => ({ ...prev, isFullscreen: false }));
+      }
+    };
+
+    if (isFullscreen) {
+      document.addEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isFullscreen, setViewState]);
+
+  const renderHeader = () => (
+    <Box sx={{ 
+      borderBottom: 1, 
+      borderColor: 'divider', 
+      backgroundColor: 'background.paper',
+      position: 'sticky',
+      top: 0,
+      zIndex: 1
+    }}>
+      <Box sx={{ p: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            📄 Resources
+          </Typography>
+          
+          <Stack direction="row" spacing={1}>
+            <Tooltip title={isWideMode ? "Normal width" : "Wide mode"}>
+              <IconButton
+                size="small"
+                onClick={() => setViewState(prev => ({ ...prev, isWideMode: !prev.isWideMode }))}
+                sx={{ 
+                  color: isWideMode ? 'primary.main' : 'text.secondary',
+                  '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                }}
+              >
+                <OpenInFullIcon />
+              </IconButton>
+            </Tooltip>
+            
+            <Tooltip title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}>
+              <IconButton
+                size="small"
+                onClick={() => setViewState(prev => ({ ...prev, isFullscreen: !prev.isFullscreen }))}
+                sx={{ 
+                  color: isFullscreen ? 'primary.main' : 'text.secondary',
+                  '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                }}
+              >
+                {isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </Box>
+      </Box>
+    </Box>
+  );
+
+  const renderContent = () => (
+    <Box sx={{ 
+      flex: 1, 
+      overflowY: 'auto', 
+      backgroundColor: 'grey.50',
+      p: 2
+    }}>
+      {folderResources.slice(0, 5).map(ref => (
+        <Card key={ref.id} sx={{ mb: 1, p: 1, cursor: 'pointer' }} onClick={() => setSelectedResource(ref)}>
+          <Typography variant="body2" fontWeight={600} noWrap>{ref.title}</Typography>
+          <Typography variant="caption" color="text.secondary" noWrap>{ref.platform}</Typography>
+        </Card>
+      ))}
+    </Box>
+  );
+
+  // Fullscreen overlay
+  if (isFullscreen) {
+    return (
+      <Box
+        sx={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 9999,
+          backgroundColor: 'background.default',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
+        {/* Fullscreen Header */}
+        <Box sx={{ 
+          borderBottom: 1, 
+          borderColor: 'divider', 
+          backgroundColor: 'background.paper',
+          p: 2
+        }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h5" sx={{ fontWeight: 600 }}>
+              📄 Resources - Fullscreen Mode
+            </Typography>
+            
+            <Stack direction="row" spacing={1}>
+              <Tooltip title={isWideMode ? "Normal width" : "Wide mode"}>
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isWideMode: !prev.isWideMode }))}
+                  sx={{ 
+                    color: isWideMode ? 'primary.main' : 'text.secondary',
+                    '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                  }}
+                >
+                  <OpenInFullIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Exit fullscreen (ESC)">
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isFullscreen: false }))}
+                  sx={{ 
+                    color: 'text.secondary',
+                    '&:hover': { backgroundColor: 'error.light', color: 'white' }
+                  }}
+                >
+                  <CloseIcon />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          </Box>
+        </Box>
+
+        {/* Fullscreen Content */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {renderContent()}
+        </Box>
+      </Box>
+    );
+  }
+
+  // Wide mode overlay
+  if (isWideMode && !isFullscreen) {
+    return (
+      <Box
+        sx={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 9998,
+          width: '80vw',
+          maxWidth: '1200px',
+          height: '80vh',
+          maxHeight: '800px',
+          backgroundColor: 'background.paper',
+          borderRadius: 2,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+          border: '1px solid',
+          borderColor: 'divider',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Wide Mode Header */}
+        <Box sx={{ 
+          borderBottom: 1, 
+          borderColor: 'divider', 
+          backgroundColor: 'background.paper',
+          p: 2
+        }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              📄 Resources - Wide Mode
+            </Typography>
+            
+            <Stack direction="row" spacing={1}>
+              <Tooltip title="Normal width">
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isWideMode: false }))}
+                  sx={{ 
+                    color: 'primary.main',
+                    '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                  }}
+                >
+                  <OpenInFullIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Fullscreen">
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isFullscreen: true }))}
+                  sx={{ 
+                    color: 'text.secondary',
+                    '&:hover': { backgroundColor: 'primary.light', color: 'white' }
+                  }}
+                >
+                  <FullscreenIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Close wide mode">
+                <IconButton
+                  onClick={() => setViewState(prev => ({ ...prev, isWideMode: false }))}
+                  sx={{ 
+                    color: 'text.secondary',
+                    '&:hover': { backgroundColor: 'error.light', color: 'white' }
+                  }}
+                >
+                  <CloseIcon />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          </Box>
+        </Box>
+
+        {/* Wide Mode Content */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {renderContent()}
+        </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <Card sx={{ 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      borderRadius: 2,
+      overflow: 'hidden',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+      border: '1px solid',
+      borderColor: 'divider'
+    }}>
+      {renderHeader()}
+      {renderContent()}
+    </Card>
+  );
+}
+
 // ---- Main App ----
 export default function App() {
   const user = useSupabaseAuthUser();
@@ -3191,6 +4619,12 @@ export default function App() {
     progress: 0,
     currentStep: ''
   });
+
+  // Enhanced view states for sidebar sections
+  const [fileExplorerView, setFileExplorerView] = useState({ isFullscreen: false, isWideMode: false });
+  const [teamView, setTeamView] = useState({ isFullscreen: false, isWideMode: false });
+  const [aiToolsView, setAiToolsView] = useState({ isFullscreen: false, isWideMode: false });
+  const [resourcesView, setResourcesView] = useState({ isFullscreen: false, isWideMode: false });
 
   // Debug currentEditor changes
   useEffect(() => {
@@ -6940,11 +8374,23 @@ useEffect(() => {
                   onToggle={() => setExpandedSections(prev => ({ ...prev, fileExplorer: !prev.fileExplorer }))}
                   icon={<FolderIcon color="primary" />}
                 >
-                  <Box sx={{ maxHeight: 300, overflowY: 'auto' }}>
-                    {folders.find(f => f.id === ROOT_ID) && 
-                      renderTreeNode(folders.find(f => f.id === ROOT_ID), folders, resources, activeFolder, setActiveFolder, editResource, removeResource, addChildFolder, renameFolder, deleteFolder, hasAnyChildren)
-                    }
-                  </Box>
+                  <EnhancedFileExplorer
+                    folders={folders}
+                    resources={resources}
+                    activeFolder={activeFolder}
+                    setActiveFolder={setActiveFolder}
+                    editResource={editResource}
+                    removeResource={removeResource}
+                    addChildFolder={addChildFolder}
+                    renameFolder={renameFolder}
+                    deleteFolder={deleteFolder}
+                    hasAnyChildren={hasAnyChildren}
+                    viewState={fileExplorerView}
+                    setViewState={setFileExplorerView}
+                    renderTreeNode={renderTreeNode}
+                    setFolders={setFolders}
+                    setResources={setResources}
+                  />
                 </CollapsibleSection>
 
                 {/* Collaborators Section */}
@@ -6955,59 +8401,13 @@ useEffect(() => {
                   icon={<GroupIcon color="success" />}
                   color="success"
                 >
-                  <List dense>
-                    <ListItem>
-                      <ListItemIcon>
-                        <Avatar sx={{ width: 24, height: 24, bgcolor: 'primary.main' }}>
-                          {collaborators.users.find(u=>u.id === collaborators.ownerId)?.email?.[0]?.toUpperCase() || '?'}
-                        </Avatar>
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={
-                          <Typography variant="body2" fontWeight={600}>
-                            {collaborators.users.find(u=>u.id === collaborators.ownerId)?.email || "Unknown"}
-                          </Typography>
-                        }
-                        secondary="Owner"
-                      />
-                    </ListItem>
-                    {collaborators.members.map(mem => {
-                      const user = collaborators.users.find(u => u.id === mem.user_id);
-                      const isAccepted = !!mem.user_id;
-                      const lastSeen = user?.last_seen ? new Date(user.last_seen) : null;
-                      const online = isAccepted && lastSeen && (Date.now() - lastSeen.getTime() < 2*60*1000);
-                      return (
-                        <ListItem key={mem.id}>
-                          <ListItemIcon>
-                            <Avatar sx={{ width: 24, height: 24, bgcolor: isAccepted ? 'success.main' : 'warning.main' }}>
-                              {mem.user_email?.[0]?.toUpperCase() || '?'}
-                            </Avatar>
-                          </ListItemIcon>
-                          <ListItemText
-                            primary={
-                              <Typography variant="body2" fontWeight={600}>
-                                {mem.user_email}
-                              </Typography>
-                            }
-                            secondary={
-                              <Typography variant="caption" color={online ? 'success.main' : 'text.secondary'}>
-                                {isAccepted ? (online ? '● Online' : '● Offline') : '● Pending'}
-                              </Typography>
-                            }
-                          />
-                        </ListItem>
-                      );
-                    })}
-                  </List>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    startIcon={<ShareIcon />}
-                    onClick={() => setShowShare(selectedWksp.id)}
-                    sx={{ mt: 1 }}
-                  >
-                    Invite
-                  </Button>
+                  <EnhancedTeam
+                    collaborators={collaborators}
+                    selectedWksp={selectedWksp}
+                    setShowShare={setShowShare}
+                    viewState={teamView}
+                    setViewState={setTeamView}
+                  />
                 </CollapsibleSection>
 
                 {/* Chat Section */}
@@ -7033,65 +8433,16 @@ useEffect(() => {
                   icon={<SmartToyIcon sx={{ color: 'secondary.main' }} />}
                   color="secondary"
                 >
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    {/* Enhanced AI Assistant Button */}
-                    <Button
-                      variant="contained"
-                      startIcon={<SmartToyIcon />}
-                      onClick={() => setShowEnhancedAI(true)}
-                      sx={{
-                        bgcolor: 'primary.main',
-                        '&:hover': { bgcolor: 'primary.dark' },
-                        mb: 2
-                      }}
-                    >
-                      🚀 Enhanced AI Assistant
-                    </Button>
-
-                    {/* Storage Test Button */}
-                    <Button
-                      variant="outlined"
-                      startIcon={<StorageIcon />}
-                      onClick={() => setShowStorageTest(true)}
-                      sx={{
-                        borderColor: 'success.main',
-                        color: 'success.main',
-                        '&:hover': { 
-                          borderColor: 'success.dark',
-                          bgcolor: 'success.light',
-                          color: 'success.dark'
-                        },
-                        mb: 2
-                      }}
-                    >
-                      🗄️ Test Storage Integration
-                    </Button>
-
-                                         {/* File Migration Button */}
-                     <SupabaseFileMigration 
-                       open={false}
-                       onClose={() => {}}
-                       workspaceId={selectedWksp.id}
-                       localResources={resources}
-                       onMigrationComplete={(result) => {
-                         console.log('Migration completed:', result);
-                         setGlobalSnackbar({
-                           open: true,
-                           message: `Migration completed: ${result.success} files migrated`,
-                           severity: 'success'
-                         });
-                       }}
-                     />
-                    
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      Create files, generate projects, and manage your workspace with AI
-                    </Typography>
-                    
-                    <AICodeReviewer 
-                      workspaceId={selectedWksp.id} 
-                      currentUser={user}
-                    />
-                  </Box>
+                  <EnhancedAiTools
+                    setShowEnhancedAI={setShowEnhancedAI}
+                    setShowStorageTest={setShowStorageTest}
+                    selectedWksp={selectedWksp}
+                    resources={resources}
+                    setGlobalSnackbar={setGlobalSnackbar}
+                    user={user}
+                    viewState={aiToolsView}
+                    setViewState={setAiToolsView}
+                  />
                 </CollapsibleSection>
 
                 {/* Resources Section */}
@@ -7102,14 +8453,12 @@ useEffect(() => {
                   icon={<InsertDriveFileIcon color="warning" />}
                   color="warning"
                 >
-                  <Box sx={{ maxHeight: 200, overflowY: 'auto' }}>
-                    {folderResources.slice(0, 5).map(ref => (
-                      <Card key={ref.id} sx={{ mb: 1, p: 1, cursor: 'pointer' }} onClick={() => setSelectedResource(ref)}>
-                        <Typography variant="body2" fontWeight={600} noWrap>{ref.title}</Typography>
-                        <Typography variant="caption" color="text.secondary" noWrap>{ref.platform}</Typography>
-                      </Card>
-                    ))}
-                  </Box>
+                  <EnhancedResources
+                    folderResources={folderResources}
+                    setSelectedResource={setSelectedResource}
+                    viewState={resourcesView}
+                    setViewState={setResourcesView}
+                  />
                 </CollapsibleSection>
                   </>
                 )}
