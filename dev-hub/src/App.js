@@ -1539,7 +1539,7 @@ function WorkspaceShare({ workspaceId, currentUser, onShared, onInviteSuccess, w
 
       // Add user to workspace_members
       const inviteData = { 
-        workspace_id: workspaceId, 
+        workspace_id: workspaceId,
         user_email: inviteEmail, 
         invited_by: currentUser.id,
         role: 'member',
@@ -1551,27 +1551,27 @@ function WorkspaceShare({ workspaceId, currentUser, onShared, onInviteSuccess, w
       console.log('About to insert invite data:', inviteData);
       
       const { data: inviteResult, error: memberError } = await supabase
-      .from('workspace_members')
+        .from('workspace_members')
         .upsert([inviteData])
         .select();
-      
+
       if (memberError) {
         console.error('Error creating invite:', memberError);
         console.error('Error details:', memberError.details);
         console.error('Error hint:', memberError.hint);
         setInviteMsg(`Error: ${memberError.message}`);
-      return;
-    }
-      
+        return;
+      }
+
       console.log('Invite created successfully:', inviteResult);
-      
+
       // Verify the invite was actually created
       const { data: verifyInvite, error: verifyError } = await supabase
         .from('workspace_members')
         .select('*')
         .eq('workspace_id', workspaceId)
         .eq('user_email', inviteEmail);
-      
+
       console.log('Verification - invite in database:', verifyInvite);
       if (verifyError) {
         console.error('Verification error:', verifyError);
@@ -1579,7 +1579,7 @@ function WorkspaceShare({ workspaceId, currentUser, onShared, onInviteSuccess, w
 
       // Send email via Express server
       try {
-        const response = await fetch('http://localhost:3002/api/invite', {
+        const response = await fetch('http://localhost:3001/api/invite', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1592,14 +1592,15 @@ function WorkspaceShare({ workspaceId, currentUser, onShared, onInviteSuccess, w
           }),
         });
 
-        const result = await response.json();
-        if (result.ok) {
+        if (response.ok) {
+          const result = await response.json();
           console.log('Email sent successfully:', result);
         } else {
-          console.error('Email sending failed:', result);
+          console.log('Email service not available (server not running), but invite was created in database');
         }
       } catch (emailError) {
-        console.error('Email service error:', emailError);
+        console.log('Email service error (server not running):', emailError.message);
+        console.log('Invite was created in database successfully');
       }
 
       setInviteMsg(`Successfully invited ${inviteEmail} to "${workspace.name}"!`);
@@ -1623,7 +1624,7 @@ function WorkspaceShare({ workspaceId, currentUser, onShared, onInviteSuccess, w
         setInvitedMembers(data);
       }
     onInviteSuccess && onInviteSuccess();
-      
+
     } catch (error) {
       setInviteMsg(`Error: ${error.message}`);
     } finally {
@@ -3601,8 +3602,7 @@ function EnhancedTeam({
         {collaborators.members.map(mem => {
           const user = collaborators.users.find(u => u.id === mem.user_id);
           const isAccepted = !!mem.user_id;
-          const lastSeen = user?.last_seen ? new Date(user.last_seen) : null;
-          const online = isAccepted && lastSeen && (Date.now() - lastSeen.getTime() < 2*60*1000);
+          const isOnline = user?.isOnline || false;
           return (
             <ListItem key={mem.id}>
               <ListItemIcon>
@@ -3617,8 +3617,8 @@ function EnhancedTeam({
                   </Typography>
                 }
                 secondary={
-                  <Typography variant="caption" color={online ? 'success.main' : 'text.secondary'}>
-                    {isAccepted ? (online ? '● Online' : '● Offline') : '● Pending'}
+                  <Typography variant="caption" color={isOnline ? 'success.main' : 'text.secondary'}>
+                    {isAccepted ? (isOnline ? '● Online' : '● Offline') : '● Pending'}
                   </Typography>
                 }
               />
@@ -7134,6 +7134,19 @@ ${output}
 
   // --- Refresh workspaces from Supabase ---
   
+  // Add periodic refresh of team member status
+  useEffect(() => {
+    if (!selectedWksp || !user) return;
+    
+    const refreshInterval = setInterval(async () => {
+      console.log('Refreshing team member status...');
+      const updatedCollaborators = await fetchCollaboratorsWithPresence(selectedWksp.id);
+      setCollaborators(updatedCollaborators);
+    }, 30000); // Refresh every 30 seconds
+    
+    return () => clearInterval(refreshInterval);
+  }, [selectedWksp, user]);
+  
 async function fetchCollaborators(workspaceId) {
   const { data } = await supabase
     .from('workspace_members')
@@ -7881,12 +7894,23 @@ useEffect(() => {
     let interval;
     async function updatePresence() {
       if (!user) return;
-      await supabase
-        .from('user_presence')
-        .upsert(
-          { user_id: user.id, last_seen: new Date().toISOString() },
-          { onConflict: 'user_id' }
-        );
+      try {
+        const now = new Date().toISOString();
+        await supabase
+          .from('user_presence')
+          .upsert(
+            { 
+              user_id: user.id, 
+              last_seen: now,
+              status: 'online',
+              updated_at: now
+            },
+            { onConflict: 'user_id' }
+          );
+        console.log('Updated presence for user:', user.id);
+      } catch (error) {
+        console.error('Error updating presence:', error);
+      }
     }
     if (user) {
       updatePresence();
@@ -7903,37 +7927,71 @@ useEffect(() => {
     }
     
     try {
-    const { data: members } = await supabase
-      .from('workspace_members')
-      .select('*')
-      .eq('workspace_id', workspaceId);
-    const { data: workspace } = await supabase
-      .from('workspaces')
-      .select('owner_id')
-      .eq('id', workspaceId)
-      .single();
+      console.log('Fetching collaborators with presence for workspace:', workspaceId);
       
+      const { data: members } = await supabase
+        .from('workspace_members')
+        .select('*')
+        .eq('workspace_id', workspaceId);
+        
+      const { data: workspace } = await supabase
+        .from('workspaces')
+        .select('owner_id')
+        .eq('id', workspaceId)
+        .single();
+        
       if (!workspace) {
         console.warn('Workspace not found:', workspaceId);
         return { members: members || [], ownerId: null, users: [] };
       }
       
-    let ids = [workspace.owner_id].concat((members || []).map(m => m.user_id).filter(Boolean));
-    let { data: users } = await supabase
-      .from('users')
-      .select('*')
-      .in('id', ids);
-    // Fetch presence
-    let { data: presence } = await supabase
-      .from('user_presence')
-      .select('*')
-      .in('user_id', ids);
-    // Attach presence to users
-    users = (users || []).map(u => {
-      const p = (presence || []).find(pr => pr.user_id === u.id);
-      return { ...u, last_seen: p?.last_seen };
-    });
-    return { members: members || [], ownerId: workspace.owner_id, users: users || [] };
+      // Get all user IDs (owner + members)
+      let userIds = [workspace.owner_id];
+      if (members && members.length > 0) {
+        userIds = userIds.concat(members.map(m => m.user_id).filter(Boolean));
+      }
+      
+      console.log('User IDs to fetch:', userIds);
+      
+      // Fetch user profiles
+      let { data: users } = await supabase
+        .from('users')
+        .select('*')
+        .in('id', userIds);
+        
+      // Fetch presence data
+      let { data: presence } = await supabase
+        .from('user_presence')
+        .select('*')
+        .in('user_id', userIds);
+        
+      console.log('Presence data:', presence);
+      
+      // Attach presence to users and calculate online status
+      users = (users || []).map(u => {
+        const p = (presence || []).find(pr => pr.user_id === u.id);
+        const lastSeen = p?.last_seen ? new Date(p.last_seen) : null;
+        const now = new Date();
+        const timeDiff = lastSeen ? (now.getTime() - lastSeen.getTime()) : null;
+        
+        // Consider online if last_seen is within 2 minutes
+        const isOnline = lastSeen && timeDiff && timeDiff < 2 * 60 * 1000;
+        
+        return { 
+          ...u, 
+          last_seen: p?.last_seen,
+          status: p?.status || 'offline',
+          isOnline: isOnline
+        };
+      });
+      
+      console.log('Processed users with presence:', users);
+      
+      return { 
+        members: members || [], 
+        ownerId: workspace.owner_id, 
+        users: users || [] 
+      };
     } catch (error) {
       console.error('Error fetching collaborators:', error);
       return { members: [], ownerId: null, users: [] };

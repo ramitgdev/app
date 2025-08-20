@@ -147,19 +147,9 @@ export const getUserWorkspaces = async () => {
     const { data: user } = await supabase.auth.getUser();
     if (!user.user) throw new Error('User not authenticated');
 
-    // Get owned workspaces and shared workspaces
+    // Use the new database function to get all accessible workspaces
     const { data, error } = await supabase
-      .from('workspaces')
-      .select(`
-        *,
-        workspace_members!inner(
-          role,
-          status,
-          accepted_at
-        )
-      `)
-      .or(`owner_id.eq.${user.user.id},workspace_members.user_id.eq.${user.user.id}`)
-      .eq('workspace_members.status', 'active');
+      .rpc('get_user_accessible_workspaces');
 
     if (error) throw error;
     
@@ -233,22 +223,9 @@ export const getPendingInvitations = async () => {
     const { data: user } = await supabase.auth.getUser();
     if (!user.user) throw new Error('User not authenticated');
 
+    // Use the new database function to get pending invitations
     const { data, error } = await supabase
-      .from('workspace_members')
-      .select(`
-        *,
-        workspaces(
-          id,
-          name,
-          description
-        ),
-        invited_by_user:users!workspace_members_invited_by_fkey(
-          full_name,
-          email
-        )
-      `)
-      .eq('user_email', user.user.email)
-      .eq('status', 'pending');
+      .rpc('get_user_pending_invitations');
 
     if (error) throw error;
     

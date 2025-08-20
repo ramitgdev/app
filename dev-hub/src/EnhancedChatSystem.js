@@ -140,6 +140,14 @@ export default function EnhancedChatSystem({ workspaceId, currentUserId, collabo
     }
   }, [workspaceId, selectedRecipient]);
 
+  // Add effect to load direct messages when recipient changes
+  useEffect(() => {
+    if (selectedRecipient && workspaceId) {
+      console.log('Recipient changed, loading direct messages for:', selectedRecipient.user_id);
+      loadDirectMessages();
+    }
+  }, [selectedRecipient?.user_id, workspaceId]);
+
   const scrollToBottom = (ref) => {
     setTimeout(() => {
       ref.current?.scrollIntoView({ behavior: 'smooth' });
@@ -192,6 +200,7 @@ export default function EnhancedChatSystem({ workspaceId, currentUserId, collabo
       
       console.log('Direct messages loaded:', data);
       setMessages(data || []);
+      scrollToBottom(messagesEndRef);
     } catch (error) {
       console.error('Error loading direct messages:', error);
       showNotification('Error loading messages: ' + error.message, 'error');
@@ -258,6 +267,8 @@ export default function EnhancedChatSystem({ workspaceId, currentUserId, collabo
 
       console.log('Direct message sent successfully:', data);
       setInput('');
+      setMessages(prev => [...prev, data]);
+      scrollToBottom(messagesEndRef);
       showNotification('Message sent!', 'success');
     } catch (error) {
       console.error('Error sending direct message:', error);
