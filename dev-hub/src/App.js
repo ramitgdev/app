@@ -1543,6 +1543,7 @@ function WorkspaceShare({ workspaceId, currentUser, onShared, onInviteSuccess, w
         user_email: inviteEmail, 
         invited_by: currentUser.id,
         role: 'member',
+        invited_at: new Date().toISOString(),
         accepted_at: null
       };
       
@@ -1579,7 +1580,7 @@ function WorkspaceShare({ workspaceId, currentUser, onShared, onInviteSuccess, w
 
       // Send email via Express server
       try {
-        const response = await fetch('http://localhost:3001/api/invite', {
+        const response = await fetch('http://localhost:3000/api/invite', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
