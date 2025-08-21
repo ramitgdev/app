@@ -7292,18 +7292,16 @@ async function fetchWorkspaces() {
     let { data: owned, error: ownedError } = await supabase.from('workspaces').select('*').eq('owner_id', user.id);
     console.log('Owned workspaces:', owned, 'Error:', ownedError);
     
-    // Get workspaces where user is an ACCEPTED member - try two separate queries
-    // Note: Database uses 'active' for accepted invites, not 'accepted'
+    // Get workspaces where user is a member - regardless of status
+    // This will show invited workspaces even if not yet accepted
     let { data: memberRowsByEmail, error: emailError } = await supabase
       .from('workspace_members')
       .select('workspace_id, user_id, status, user_email')
-      .eq('status', 'active')
       .eq('user_email', user.email);
     
     let { data: memberRowsByUserId, error: userIdError } = await supabase
       .from('workspace_members')
       .select('workspace_id, user_id, status, user_email')
-      .eq('status', 'active')
       .eq('user_id', user.id);
     
     console.log('Member workspaces by email:', memberRowsByEmail, 'Error:', emailError);
@@ -7357,7 +7355,6 @@ async function fetchWorkspaces() {
             workspaces (*)
           `)
           .eq('user_email', user.email)
-          .eq('status', 'active')
           .in('workspace_id', memberWorkspaceIds);
         
         console.log('Joined query result:', joinedData, 'Error:', joinedError);
@@ -8224,7 +8221,14 @@ useEffect(() => {
                     </Stack>
                   }>
                   <ListItemIcon><GroupIcon color="primary" /></ListItemIcon>
-                  <ListItemText primary={<Typography fontWeight={700}>{wksp.name}</Typography>} />
+                  <ListItemText 
+                    primary={<Typography fontWeight={700}>{wksp.name}</Typography>}
+                    secondary={
+                      wksp.owner_id === user.id ? 
+                        'Owner' : 
+                        'Member'
+                    }
+                  />
                 </ListItem>
               ))}
               {workspaces.length === 0 && (

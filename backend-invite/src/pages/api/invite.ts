@@ -1,8 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
+// Use the SAME connection method as your main app
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://itxnrnohdagesykzalzl.supabase.co';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0eG5ybm9oZGFnZXN5a3phbHpsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI5NzE1MTgsImV4cCI6MjA2ODU0NzUxOH0.5tmd_k9Fn0qscrSpZL0bLjs_dT_IsfBlN-iT5D_noyg';
 
 export default async function handler(
   req: NextApiRequest,
@@ -28,37 +29,40 @@ export default async function handler(
   console.log('Request body:', req.body);
   console.log('Environment check:', {
     supabaseUrl: !!supabaseUrl,
-    supabaseServiceKey: !!supabaseServiceKey
+    supabaseAnonKey: !!supabaseAnonKey
   });
   
   const { email, workspace_id, inviter_id, message } = req.body;
 
   // Check if environment variables are set
-  if (!supabaseUrl || !supabaseServiceKey) {
-    console.error('Missing environment variables:', { supabaseUrl: !!supabaseUrl, supabaseServiceKey: !!supabaseServiceKey });
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error('Missing environment variables:', { supabaseUrl: !!supabaseUrl, supabaseAnonKey: !!supabaseAnonKey });
     return res.status(500).json({ error: 'Server configuration error' });
   }
 
   try {
     console.log('Creating Supabase client...');
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    // Use the SAME client as your main app (ANON key, not service role)
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
     console.log('Supabase client created successfully');
+    console.log('🔍 Using Supabase URL:', supabaseUrl);
+    console.log('🔍 Using ANON key (same as main app)');
 
     // Get workspace and inviter details for the email
-    const { data: workspace } = await supabaseAdmin
+    const { data: workspace } = await supabase
       .from('workspaces')
       .select('name, description')
       .eq('id', workspace_id)
       .single();
     
-    const { data: inviter } = await supabaseAdmin
+    const { data: inviter } = await supabase
       .from('users')
       .select('full_name, email')
       .eq('id', inviter_id)
       .single();
 
     console.log('Attempting to invite user by email...');
-    const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email);
+    const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(email);
     
     // Handle the case where user already exists
     if (inviteError) {
@@ -73,15 +77,61 @@ export default async function handler(
     }
 
     console.log('Adding user to workspace members...');
-    const { error: memberError } = await supabaseAdmin
+    console.log('🔍 Insert data:', { workspace_id, user_email: email, invited_by: inviter_id });
+    
+    // First, check if the member already exists
+    const { data: existingMember, error: checkError } = await supabase
       .from('workspace_members')
-      .upsert([{ workspace_id, user_email: email, invited_by: inviter_id }]);
+      .select('*')
+      .eq('workspace_id', workspace_id)
+      .eq('user_email', email);
+    
+    if (checkError) {
+      console.error('❌ Error checking existing member:', checkError);
+    } else {
+      console.log('🔍 Existing members found:', existingMember);
+    }
+    
+    // Try the insert with proper invite data
+    const { data: memberData, error: memberError } = await supabase
+      .from('workspace_members')
+      .upsert([{ 
+        workspace_id, 
+        user_email: email, 
+        invited_by: inviter_id,
+        role: 'member',
+        invited_at: new Date().toISOString(),
+        accepted_at: null
+      }])
+      .select();
 
     if (memberError) {
-      console.error('Member error:', memberError);
+      console.error('❌ Member insert error:', memberError);
+      console.error('❌ Error code:', memberError.code);
+      console.error('❌ Error message:', memberError.message);
+      console.error('❌ Error details:', memberError.details);
+      console.error('❌ Error hint:', memberError.hint);
       return res.status(400).json({ error: memberError.message });
     }
-    console.log('User added to workspace members successfully');
+    
+    console.log('✅ User added to workspace members successfully');
+    console.log('✅ Member data inserted:', memberData);
+    
+    // Verify the insertion actually worked
+    const { data: verifyMember, error: verifyError } = await supabase
+      .from('workspace_members')
+      .select('*')
+      .eq('workspace_id', workspace_id)
+      .eq('user_email', email)
+      .single();
+    
+    if (verifyError) {
+      console.error('❌ Verification failed - member not found:', verifyError);
+      console.error('❌ Verification error code:', verifyError.code);
+      console.error('❌ Verification error message:', verifyError.message);
+    } else {
+      console.log('✅ Verification successful - member found:', verifyMember);
+    }
 
     // Send email notification using the real email service
     console.log('Sending email notification...');
