@@ -7,7 +7,7 @@
 Create a `.env` file in your `dev-hub` folder with your Claude API key:
 
 ```env
-REACT_APP_CLAUDE_API_KEY=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
+REACT_APP_CLAUDE_API_KEY=your_claude_api_key_here
 ```
 
 ### Step 2: Restart Your App
