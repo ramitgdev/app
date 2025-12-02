@@ -29,9 +29,9 @@ function GoogleDrivePicker({ googleToken, onFileSelect, setGlobalSnackbar, setGo
   const [standardViewerLoading, setStandardViewerLoading] = useState(false);
   const [standardViewerError, setStandardViewerError] = useState('');
 
-  // Your Google Cloud credentials
-  const CLIENT_ID = '946277888643-821lvkhan6jmpi6ngi8l93b45kuhm71e.apps.googleusercontent.com';
-  const API_KEY = 'AIzaSyBzq3IXRJ918muozJOq02BAYTBCBdFahLE';
+  // Your Google Cloud credentials - use environment variables
+  const CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || '';
+  const API_KEY = process.env.REACT_APP_GOOGLE_API_KEY || '';
 
   // Load Google Drive files using the Drive API
   const loadDriveFiles = useCallback(async (folderId = 'root', pageToken = null) => {
