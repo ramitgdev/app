@@ -352,9 +352,14 @@ REACT_APP_GOOGLE_CLIENT_ID=your_google_client_id
 
 ## 📝 Documentation
 
-- [Design Document](./DESIGN_DOCUMENT.md) - Comprehensive feature documentation
-- [Task Management Setup](./TASK_MANAGEMENT_SETUP.md) - Analytics dashboard setup guide
-- [Supabase Setup Guide](./SUPABASE_SETUP_GUIDE.md) - Backend configuration
+All documentation is available in the [`docs/`](./docs/) directory:
+
+- [Design Document](./docs/DESIGN_DOCUMENT.md) - Comprehensive feature documentation
+- [Task Management Setup](./docs/TASK_MANAGEMENT_SETUP.md) - Analytics dashboard setup guide
+- [Supabase Setup Guide](./docs/SUPABASE_SETUP_GUIDE.md) - Backend configuration
+- [Workspace Sharing Setup](./docs/WORKSPACE_SHARING_SETUP.md) - Collaboration features
+- [Enhanced Chat Setup](./docs/ENHANCED_CHAT_SETUP_GUIDE.md) - Real-time messaging
+- [Task Management Improvements](./docs/TASK_MANAGEMENT_ADVANCED_IMPROVEMENTS.md) - Advanced features
 
 ---
 
