@@ -10,7 +10,7 @@ You're getting "infinite recursion detected in policy for relation 'workspace_me
 ## The Solution
 
 ### Step 1: Run the Fix Script
-Execute the `supabase-fix-infinite-recursion.sql` file in your Supabase SQL Editor. This will:
+Execute the `database/scripts/supabase-fix-infinite-recursion.sql` file in your Supabase SQL Editor. This will:
 
 1. **Drop all existing conflicting policies** on `workspace_members` and `workspaces` tables
 2. **Create clean, simple policies** that avoid circular references
@@ -64,6 +64,6 @@ After running the fix script, try creating a new workspace again. The error shou
 
 ## Files to Use Going Forward
 
-- Use `supabase-basic-tables.sql` for table creation
-- Use `supabase-fix-infinite-recursion.sql` for security policies
+- Use `database/scripts/supabase-basic-tables.sql` for table creation
+- Use `database/scripts/supabase-fix-infinite-recursion.sql` for security policies
 - Avoid mixing multiple security policy files

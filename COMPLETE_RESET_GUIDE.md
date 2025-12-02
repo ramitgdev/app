@@ -2,7 +2,7 @@
 
 ## What This Does
 
-The `supabase-complete-reset.sql` script will:
+The `database/scripts/supabase-complete-reset.sql` script will:
 
 1. **Delete everything** - All tables, policies, triggers, and functions
 2. **Rebuild from scratch** - Clean, properly structured tables
@@ -14,7 +14,7 @@ The `supabase-complete-reset.sql` script will:
 ### Step 1: Run the Reset Script
 1. Open your Supabase dashboard
 2. Go to SQL Editor
-3. Copy and paste the entire `supabase-complete-reset.sql` file
+3. Copy and paste the entire `database/scripts/supabase-complete-reset.sql` file
 4. Click "Run" to execute
 
 ### Step 2: Test Your Functionality
@@ -103,7 +103,7 @@ WHERE wm.workspace_id = 'workspace-uuid' AND wm.status = 'accepted';
 
 ## Files to Use Going Forward
 
-- **Use only:** `supabase-complete-reset.sql`
+- **Use only:** `database/scripts/supabase-complete-reset.sql`
 - **Ignore:** All other SQL files (they're outdated)
 
 This reset gives you a clean, working database with all the functionality you need for workspace management and collaboration.

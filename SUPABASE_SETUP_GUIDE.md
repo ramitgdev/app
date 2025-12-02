@@ -11,7 +11,7 @@
 
 **Run the SQL Schema:**
 1. Go to your Supabase Dashboard → SQL Editor
-2. Copy and paste the entire content from `supabase-setup.sql`
+2. Copy and paste the entire content from `database/scripts/supabase-setup.sql`
 3. Click "Run" to execute the schema
 
 This will create:
@@ -103,7 +103,7 @@ After completing the above steps:
 **Solution:** Disable email confirmation (Step 2, Option A)
 
 ### Issue: "relation 'public.users' does not exist"
-**Solution:** Run the SQL schema from `supabase-setup.sql`
+**Solution:** Run the SQL schema from `database/scripts/supabase-setup.sql`
 
 ### Issue: "Row Level Security policy violation"
 **Solution:** The SQL schema includes proper RLS policies

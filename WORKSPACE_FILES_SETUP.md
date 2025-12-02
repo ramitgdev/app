@@ -17,10 +17,10 @@ We need to:
 
 ### Step 1: Update Database Schema
 
-Run the `supabase-workspace-files.sql` script in your Supabase SQL Editor:
+Run the `database/scripts/supabase-workspace-files.sql` script in your Supabase SQL Editor:
 
 ```sql
--- Copy and paste the entire supabase-workspace-files.sql file
+-- Copy and paste the entire database/scripts/supabase-workspace-files.sql file
 -- This will create the workspace_files and workspace_folders tables
 ```
 

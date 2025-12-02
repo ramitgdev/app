@@ -8,7 +8,7 @@ When you share a workspace named "rohan" with another account, the workspace app
 ### Step 1: Run the Database Update
 1. Go to your Supabase dashboard
 2. Open the SQL Editor
-3. Copy and paste the entire `supabase-workspace-files.sql` file
+3. Copy and paste the entire `database/scripts/supabase-workspace-files.sql` file
 4. Click "Run" to execute
 
 ### Step 2: Update Your App.js (Key Changes)

@@ -92,6 +92,9 @@ import './test-claude-integration';
 import WebIDE from './WebIDE';
 import EnhancedWebIDE from './EnhancedWebIDE';
 import EnhancedChatSystem from './EnhancedChatSystem';
+import TaskManager from './TaskManager';
+import QuickTaskWidget from './QuickTaskWidget';
+import TaskNotifications from './TaskNotifications';
 
 // Import workspace file operations
 import { 
@@ -8301,6 +8304,15 @@ useEffect(() => {
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
             DevHub Workspace
           </Typography>
+          
+          {/* Task Notifications */}
+          {user && selectedWksp && (
+            <TaskNotifications 
+              userId={user.id} 
+              workspaceId={selectedWksp.id} 
+            />
+          )}
+          
           <Tabs value={mainTab} onChange={(_, v) => setMainTab(v)} indicatorColor="primary" textColor="primary">
             <Tab label="Workspaces" />
             <Tab icon={<CloudUploadIcon />} label="Marketplace" />
@@ -8551,6 +8563,7 @@ useEffect(() => {
                   >
                     <Tab label="Google Workspace" value="google" />
                     <Tab label="Web IDE" value="web-ide" />
+                    <Tab label="Tasks" value="tasks" />
                     <Tab label="Resources" value="resources" />
                     <Tab label="Search" value="search" />
                     <Tab label="Import" value="import" />
@@ -9241,6 +9254,20 @@ useEffect(() => {
                   )}
 
 
+                  {activeDevelopmentTab === 'tasks' && (
+                    <Box>
+                      <Typography variant="h5" fontWeight={700} mb={3}>Task Management</Typography>
+                      <TaskManager 
+                        userId={user?.id} 
+                        workspaceId={selectedWksp?.id} 
+                        onTaskUpdate={() => {
+                          // Refresh any relevant data when tasks are updated
+                          console.log('Tasks updated');
+                        }}
+                      />
+                    </Box>
+                  )}
+
                   {activeDevelopmentTab === 'resources' && (
                     <Box>
                       <Typography variant="h5" fontWeight={700} mb={3}>Resource Management</Typography>
@@ -9460,6 +9487,18 @@ useEffect(() => {
             </Box>
           )}
         </DndProvider>
+      )}
+      
+      {/* Quick Task Widget - Global */}
+      {user && selectedWksp && (
+        <QuickTaskWidget 
+          userId={user.id} 
+          workspaceId={selectedWksp.id}
+          onTaskCreated={() => {
+            // Refresh task data if needed
+            console.log('Task created via quick widget');
+          }}
+        />
       )}
       {mainTab === 1 && <MarketplacePanel currentUser={user} />}
 

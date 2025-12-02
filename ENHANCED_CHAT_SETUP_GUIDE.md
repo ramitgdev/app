@@ -23,7 +23,7 @@ First, run the enhanced chat schema in your Supabase SQL Editor:
 
 1. Open your Supabase dashboard
 2. Go to SQL Editor
-3. Copy and paste the entire `supabase-enhanced-chat-schema.sql` file
+3. Copy and paste the entire `database/scripts/supabase-enhanced-chat-schema.sql` file
 4. Click "Run" to execute
 
 This will create:

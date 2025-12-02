@@ -23,7 +23,7 @@ We're implementing a hybrid approach:
 Execute this SQL in your Supabase SQL Editor:
 
 ```sql
--- Copy and paste the contents of supabase-workspace-files-storage.sql
+-- Copy and paste the contents of database/scripts/supabase-workspace-files-storage.sql
 ```
 
 This will:

@@ -14,13 +14,13 @@
 
 2. **Run the Presence System Fix**
    ```sql
-   -- Copy and paste the entire supabase-fix-presence-system.sql file
+   -- Copy and paste the entire database/scripts/supabase-fix-presence-system.sql file
    -- Click "Run"
    ```
 
 3. **Run the Workspace Permissions Fix**
    ```sql
-   -- Copy and paste the entire supabase-fix-workspace-chat-permissions.sql file
+   -- Copy and paste the entire database/scripts/supabase-fix-workspace-chat-permissions.sql file
    -- Click "Run"
    ```
 
@@ -30,7 +30,7 @@
 2. **Open Browser Console** (F12)
 3. **Run the debug script**:
    ```javascript
-   // Copy and paste the debug-workspace-membership.js content
+   // Copy and paste the scripts/debug-workspace-membership.js content
    // This will show you the current state of workspaces and members
    ```
 
@@ -46,7 +46,7 @@
 
 1. **In the `ramitrgoyal@gmail.com` account console**, run:
    ```javascript
-   // Copy and paste the connect-accounts-to-workspace.js content
+   // Copy and paste the scripts/connect-accounts-to-workspace.js content
    // This will automatically connect both accounts to the same workspace
    ```
 
@@ -93,12 +93,12 @@
 
 ### Issue 1: "No workspaces found for user"
 **Solution:**
-- Run the `connect-accounts-to-workspace.js` script
+- Run the `scripts/connect-accounts-to-workspace.js` script
 - This will create a workspace if none exists
 
 ### Issue 2: "RLS policy issue" errors
 **Solution:**
-- Run the `supabase-fix-workspace-chat-permissions.sql` script
+- Run the `database/scripts/supabase-fix-workspace-chat-permissions.sql` script
 - This recreates the tables with proper RLS policies
 
 ### Issue 3: "User not found" errors

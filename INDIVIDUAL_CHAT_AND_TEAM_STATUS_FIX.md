@@ -62,7 +62,7 @@ useEffect(() => {
 ### 3. Database Schema Fix
 
 **New File Created:**
-- `supabase-fix-presence-system.sql`
+- `database/scripts/supabase-fix-presence-system.sql`
 
 **Key Changes:**
 - Recreated `user_presence` table with proper structure
@@ -77,7 +77,7 @@ useEffect(() => {
 
 1. Open your Supabase dashboard
 2. Go to SQL Editor
-3. Copy and paste the entire `supabase-fix-presence-system.sql` file
+3. Copy and paste the entire `database/scripts/supabase-fix-presence-system.sql` file
 4. Click "Run" to execute
 
 ### Step 2: Restart Your Application

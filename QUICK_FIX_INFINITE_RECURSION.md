@@ -10,7 +10,7 @@ This happens when RLS (Row Level Security) policies reference each other in a ci
 ### Step 1: Fix the Database Policies
 1. **Open your Supabase dashboard**
 2. **Go to SQL Editor**
-3. **Copy and paste the entire `supabase-fix-infinite-recursion.sql` file**
+3. **Copy and paste the entire `database/scripts/supabase-fix-infinite-recursion.sql` file**
 4. **Click "Run"**
 
 This will:
@@ -23,7 +23,7 @@ Since the share functionality was broken, we'll connect the accounts manually:
 
 1. **Open DevHub in the `ramitrgoyal@gmail.com` account**
 2. **Open browser console** (F12)
-3. **Copy and paste the `manual-workspace-connection.js` content**
+3. **Copy and paste the `scripts/manual-workspace-connection.js` content**
 4. **Run it**
 
 This will:

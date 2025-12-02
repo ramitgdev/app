@@ -28,10 +28,10 @@ This guide will help you set up the complete workspace sharing system with email
 
 ### 1. Database Setup
 
-First, ensure your Supabase database has the required tables. Run the SQL from `supabase-setup.sql` in your Supabase SQL Editor:
+First, ensure your Supabase database has the required tables. Run the SQL from `database/scripts/supabase-setup.sql` in your Supabase SQL Editor:
 
 ```sql
--- The tables are already defined in supabase-setup.sql
+-- The tables are already defined in database/scripts/supabase-setup.sql
 -- This includes: workspaces, workspace_members, users, etc.
 ```
 
